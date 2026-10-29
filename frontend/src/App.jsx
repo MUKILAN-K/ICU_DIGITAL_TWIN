@@ -1,167 +1,70 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
   Building2,
-  Bed,
-  Users,
-  Clock,
-  Database,
-  Home,
   Layers,
   Activity,
   Bell,
   Settings,
-  ArrowLeft,
-  ChevronRight,
+  Bed,
+  Users,
+  Clock,
+  Database,
+  Radio,
+  ShieldCheck,
   ShieldAlert,
+  AlertTriangle,
+  Info,
 } from 'lucide-react';
-import { fetchRooms } from './services/api';
-import RoomDetailModal from './components/RoomDetailModal';
-import AlertBanner from './components/AlertBanner';
+import { ICUProvider, useICU } from './context/ICUContext';
 import HospitalFloor3D from './components/HospitalFloor3D';
-import HospitalExterior3D from './components/HospitalExterior3D';
-import HospitalLobby3D from './components/HospitalLobby3D';
-import ICURoomInterior3D from './components/ICURoomInterior3D';
-import RoomTelemetryPanel from './components/RoomTelemetryPanel';
+import PatientMonitoringPanel from './components/PatientMonitoringPanel';
+import AlertBanner from './components/AlertBanner';
+import OverviewView from './views/OverviewView';
+import PatientVitalsView from './views/PatientVitalsView';
+import AlertsView from './views/AlertsView';
+import SettingsView from './views/SettingsView';
 
-const WS_URL = 'ws://localhost:8000/ws/live';
+const RoomDetailModal = lazy(() => import('./components/RoomDetailModal'));
 
-export default function App() {
-  const [rooms, setRooms] = useState([]);
-  const [selectedRoomId, setSelectedRoomId] = useState('ICU-101');
-  const [analyticsRoomId, setAnalyticsRoomId] = useState(null); // for 60-min modal
-  const [wsStatus, setWsStatus] = useState('connecting'); // 'connected', 'connecting', 'error'
-  const [lastTickReadings, setLastTickReadings] = useState([]);
+function MainLayout() {
+  const {
+    activeNav,
+    setActiveNav,
+    beds,
+    selectedRoomId,
+    setSelectedRoomId,
+    selectedBed,
+    safeCount,
+    warningCount,
+    alertCount,
+    unacknowledgedAlertsCount,
+    wsStatus,
+  } = useICU();
+
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [detailedModalRoomId, setDetailedModalRoomId] = useState(null);
 
-  // 4 Navigation levels: 'level1_exterior' | 'level2_lobby' | 'level3_floor' | 'level4_room'
-  const [level, setLevel] = useState('level3_floor'); // Default directly to the stunning Image 1 ICU Floor!
-  const wsRef = useRef(null);
-
-  // Live ticking clock (matching Image 1)
+  // Live wall clock
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Initial REST fetch to seed rooms state immediately
-  useEffect(() => {
-    async function loadInitial() {
-      try {
-        const data = await fetchRooms();
-        setRooms(data);
-        if (data.length > 0 && !selectedRoomId) {
-          setSelectedRoomId(data[0].room_id);
-        }
-      } catch (err) {
-        console.error('REST initial fetch error:', err);
-      }
-    }
-    loadInitial();
-  }, []);
-
-  // WebSocket Connection Management
-  useEffect(() => {
-    let reconnectTimer = null;
-
-    function connect() {
-      setWsStatus('connecting');
-      const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setWsStatus('connected');
-        console.log('Connected to ICU Live WebSocket');
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === 'initial_state' && payload.rooms) {
-            updateRoomsFromWebSocket(payload.rooms);
-            setLastTickReadings(payload.rooms);
-          } else if (payload.type === 'live_update' && payload.rooms) {
-            updateRoomsFromWebSocket(payload.rooms);
-            setLastTickReadings(payload.rooms);
-          }
-        } catch (err) {
-          console.error('Error parsing WS frame:', err);
-        }
-      };
-
-      ws.onerror = (err) => {
-        console.error('WebSocket Error:', err);
-        setWsStatus('error');
-      };
-
-      ws.onclose = () => {
-        setWsStatus('connecting');
-        console.log('WebSocket closed. Reconnecting in 3 seconds...');
-        reconnectTimer = setTimeout(connect, 3000);
-      };
-    }
-
-    connect();
-
-    return () => {
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      if (wsRef.current) wsRef.current.close();
-    };
-  }, []);
-
-  function updateRoomsFromWebSocket(tickRooms) {
-    setRooms((prevRooms) => {
-      if (prevRooms.length === 0) {
-        return tickRooms.map((tr) => ({
-          room_id: tr.room_id,
-          name: tr.room_id,
-          status: tr.status || 'safe',
-          latest_reading: tr,
-        }));
-      }
-
-      const map = new Map(tickRooms.map((tr) => [tr.room_id, tr]));
-      return prevRooms.map((r) => {
-        const tick = map.get(r.room_id);
-        if (tick) {
-          return {
-            ...r,
-            status: tick.status || r.status,
-            latest_reading: tick,
-          };
-        }
-        return r;
-      });
-    });
-  }
-
-  // System status metrics summary
-  const safeCount = rooms.filter((r) => r.status === 'safe').length;
-  const warningCount = rooms.filter((r) => r.status === 'warning').length;
-  const alertCount = rooms.filter((r) => r.status === 'alert').length;
-  const alertRooms = rooms.filter((r) => r.status === 'alert');
-
-  // Currently selected room data for Telemetry Panel & Level 4
-  const selectedRoomData = rooms.find((r) => r.room_id === selectedRoomId) || rooms[0] || {
-    room_id: 'ICU-101',
-    name: 'Bed 1 — Isolation Unit',
-    status: 'safe',
-  };
-
-  // Formatted date string matching Image 1: "Tue, 27 Oct 2026"
-  const dateFormatted = currentTime.toLocaleDateString('en-US', {
+  const formattedDate = currentTime.toLocaleDateString('en-US', {
     weekday: 'short',
     day: '2-digit',
     month: 'short',
     year: 'numeric',
   });
 
-  // Formatted time string matching Image 1: "03:24:18 PM"
-  const timeFormatted = currentTime.toLocaleTimeString('en-US', {
+  const formattedTime = currentTime.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: true,
+    hour12: false,
   });
+
+  const criticalBeds = beds.filter((b) => b.status === 'alert');
 
   return (
     <div
@@ -171,443 +74,307 @@ export default function App() {
         height: '100vh',
         width: '100vw',
         overflow: 'hidden',
-        background: '#070b14',
+        background: '#080e1a',
         color: '#f8fafc',
-        fontFamily: "'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif",
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
       {/* ══════════════════════════════════════════════════════════════
-          1. TOP COMMAND BAR (Professional Healthcare SaaS Header)
+          1. TOP APP HEADER (Professional Clinical Operations Bar)
       ══════════════════════════════════════════════════════════════ */}
       <header
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '10px 24px',
-          background: 'rgba(10, 15, 28, 0.96)',
-          backdropFilter: 'blur(20px)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          padding: '8px 20px',
+          background: '#0b1322',
+          borderBottom: '1px solid #1e293b',
           zIndex: 50,
           flexShrink: 0,
         }}
       >
-        {/* Brand: Metropolitan General Hospital - ICU Digital Twin */}
+        {/* Brand & Identity */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '9px',
-              background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.2) 0%, rgba(14, 165, 233, 0.1) 100%)',
-              border: '1px solid rgba(56, 189, 248, 0.35)',
+              width: '32px',
+              height: '32px',
+              borderRadius: '6px',
+              background: '#0284c7',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 2px 10px rgba(2, 132, 199, 0.2)',
+              color: '#ffffff',
             }}
           >
-            <Building2 size={20} color="#38bdf8" />
+            <Building2 size={18} />
           </div>
+
           <div>
-            <div
-              style={{
-                fontWeight: 800,
-                fontSize: '15px',
-                letterSpacing: '-0.01em',
-                color: '#ffffff',
-                lineHeight: 1.2,
-              }}
-            >
+            <div style={{ fontWeight: 800, fontSize: '13px', letterSpacing: '0.04em', color: '#ffffff', lineHeight: 1.2 }}>
               METROPOLITAN GENERAL HOSPITAL
             </div>
-            <div
-              style={{
-                fontWeight: 700,
-                fontSize: '11px',
-                letterSpacing: '0.06em',
-                color: '#0ea5e9',
-                textTransform: 'uppercase',
-              }}
-            >
-              ICU Digital Twin • Bio-HVAC HUD
+            <div style={{ fontSize: '11px', fontWeight: 600, color: '#38bdf8', letterSpacing: '0.02em' }}>
+              ICU Digital Twin • Ward 8B Surveillance
             </div>
           </div>
         </div>
 
-        {/* Center / Right Telemetry Pills Array (Matching Image 1) */}
+        {/* Center / Right Telemetry Summary Indicators */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Floor 8 / ICU Wing */}
+          {/* Bed Status Distribution Pills */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.07)',
-              borderRadius: '8px',
-              padding: '5px 12px',
+              background: '#0f172a',
+              border: '1px solid #1e293b',
+              borderRadius: '6px',
+              padding: '4px 10px',
+              fontSize: '11px',
             }}
           >
-            <Building2 size={15} color="#38bdf8" />
-            <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.2 }}>
-              <div style={{ color: '#ffffff', fontWeight: 600, fontSize: '12px' }}>Floor 8</div>
-              <div>ICU Wing</div>
-            </div>
+            <span style={{ color: '#94a3b8', fontWeight: 600 }}>5 Beds:</span>
+            <span style={{ color: '#10b981', fontWeight: 700 }}>{safeCount} Normal</span>
+            <span style={{ color: '#64748b' }}>•</span>
+            <span style={{ color: '#f59e0b', fontWeight: 700 }}>{warningCount} Warning</span>
+            <span style={{ color: '#64748b' }}>•</span>
+            <span style={{ color: '#f43f5e', fontWeight: 700 }}>{alertCount} Critical</span>
           </div>
 
-          {/* 5 ICU Rooms */}
+          {/* Wall Clock */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.07)',
-              borderRadius: '8px',
-              padding: '5px 12px',
+              gap: '6px',
+              background: '#0f172a',
+              border: '1px solid #1e293b',
+              borderRadius: '6px',
+              padding: '4px 10px',
+              fontSize: '11px',
+              color: '#94a3b8',
             }}
           >
-            <Bed size={15} color="#38bdf8" />
-            <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.2 }}>
-              <div style={{ color: '#ffffff', fontWeight: 600, fontSize: '12px' }}>{rooms.length || 5}</div>
-              <div>ICU Rooms</div>
-            </div>
+            <Clock size={13} color="#38bdf8" />
+            <span>{formattedDate}</span>
+            <span style={{ color: '#f8fafc', fontWeight: 700, fontFamily: 'monospace' }}>
+              {formattedTime}
+            </span>
           </div>
 
-          {/* 5 Monitored Beds */}
+          {/* Prominent Demo Data Badge */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.07)',
-              borderRadius: '8px',
-              padding: '5px 12px',
+              gap: '6px',
+              background: wsStatus === 'connected' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(2, 132, 199, 0.15)',
+              border: wsStatus === 'connected' ? '1px solid #10b981' : '1px solid #0284c7',
+              borderRadius: '6px',
+              padding: '4px 10px',
+              fontSize: '11px',
             }}
           >
-            <Users size={15} color="#38bdf8" />
-            <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.2 }}>
-              <div style={{ color: '#ffffff', fontWeight: 600, fontSize: '12px' }}>5</div>
-              <div>Beds Monitored</div>
-            </div>
-          </div>
-
-          {/* Live Date & Time Clock with Tabular Monospace Digits */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.07)',
-              borderRadius: '8px',
-              padding: '5px 12px',
-            }}
-          >
-            <Clock size={15} color="#38bdf8" />
-            <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.2 }}>
-              <div>{dateFormatted}</div>
-              <div
-                style={{
-                  color: '#ffffff',
-                  fontWeight: 600,
-                  fontSize: '12px',
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                {timeFormatted}
-              </div>
-            </div>
-          </div>
-
-          {/* Simulation Mode Indicator */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.07)',
-              borderRadius: '8px',
-              padding: '5px 12px',
-            }}
-          >
-            <Database size={15} color="#10b981" />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span
-                style={{
-                  width: '7px',
-                  height: '7px',
-                  borderRadius: '50%',
-                  backgroundColor: '#10b981',
-                  boxShadow: '0 0 8px #10b981',
-                }}
-              />
-              <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.2 }}>
-                <div style={{ color: '#ffffff', fontWeight: 600, fontSize: '12px' }}>Simulation</div>
-                <div>{wsStatus === 'connected' ? 'Live Telemetry' : 'Connecting...'}</div>
-              </div>
-            </div>
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: wsStatus === 'connected' ? '#10b981' : '#38bdf8',
+                boxShadow: wsStatus === 'connected' ? '0 0 6px #10b981' : '0 0 6px #38bdf8',
+              }}
+            />
+            <span style={{ fontWeight: 700, color: wsStatus === 'connected' ? '#10b981' : '#38bdf8' }}>
+              {wsStatus === 'connected' ? 'BACKEND LIVE' : 'DEMO DATA'}
+            </span>
+            <span style={{ color: '#64748b', fontSize: '10px' }}>
+              {wsStatus === 'connected' ? 'WS Connected' : 'Simulated'}
+            </span>
           </div>
         </div>
       </header>
 
-      {/* Floating Clinical Alert Notification (Dismissible, Non-intrusive) */}
+      {/* Floating Alert Banner (Non-intrusive) */}
       <AlertBanner
-        alertRooms={alertRooms}
+        alertRooms={criticalBeds}
         onSelectRoom={(id) => {
           setSelectedRoomId(id);
-          setLevel('level3_floor');
+          setActiveNav('icu_floor');
         }}
       />
 
       {/* ══════════════════════════════════════════════════════════════
-          2. MAIN WORKSPACE: SIDEBAR + 3D VIEWPORT
+          2. APPLICATION WORKSPACE: SIDEBAR + ACTIVE VIEW
       ══════════════════════════════════════════════════════════════ */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}>
-        {/* Left Navigation Sidebar (Refined Spacing & Polish) */}
+        {/* Navigation Sidebar */}
         <nav
           style={{
-            width: '190px',
-            background: 'rgba(10, 15, 26, 0.98)',
-            borderRight: '1px solid rgba(255, 255, 255, 0.06)',
+            width: '180px',
+            background: '#090f1d',
+            borderRight: '1px solid #1e293b',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            padding: '16px 10px',
+            padding: '14px 8px',
             zIndex: 30,
             flexShrink: 0,
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {/* Section Tag */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div
               style={{
                 fontSize: '10px',
                 fontWeight: 700,
-                color: '#475569',
+                color: '#64748b',
                 letterSpacing: '0.08em',
-                padding: '4px 12px 8px 12px',
+                padding: '4px 10px 8px 10px',
                 textTransform: 'uppercase',
               }}
             >
               Navigation
             </div>
 
-            {/* Overview / Campus Exterior */}
-            <SidebarButton
-              icon={Home}
+            <NavBtn
+              icon={Building2}
               label="Overview"
-              isActive={level === 'level1_exterior'}
-              onClick={() => setLevel('level1_exterior')}
+              isActive={activeNav === 'overview'}
+              onClick={() => setActiveNav('overview')}
             />
 
-            {/* ICU Floor (Image 1 Active Mode) */}
-            <SidebarButton
+            <NavBtn
               icon={Layers}
               label="ICU Floor"
-              isActive={level === 'level3_floor'}
-              onClick={() => setLevel('level3_floor')}
+              isActive={activeNav === 'icu_floor'}
+              onClick={() => setActiveNav('icu_floor')}
             />
 
-            {/* Reception Lobby */}
-            <SidebarButton
-              icon={Building2}
-              label="Lobby Hub"
-              isActive={level === 'level2_lobby'}
-              onClick={() => setLevel('level2_lobby')}
-            />
-
-            {/* Patient Vitals / First-Person Room */}
-            <SidebarButton
+            <NavBtn
               icon={Activity}
               label="Patient Vitals"
-              isActive={level === 'level4_room'}
-              onClick={() => setLevel('level4_room')}
+              isActive={activeNav === 'patient_vitals'}
+              onClick={() => setActiveNav('patient_vitals')}
             />
 
-            {/* Alerts with Badge */}
-            <button
-              onClick={() => {
-                if (alertRooms.length > 0) {
-                  setSelectedRoomId(alertRooms[0].room_id);
-                  setLevel('level3_floor');
-                }
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: 'none',
-                background: 'transparent',
-                color: '#94a3b8',
-                fontWeight: 500,
-                fontSize: '13px',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
-                e.currentTarget.style.color = '#ffffff';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.color = '#94a3b8';
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Bell size={17} color={alertCount > 0 ? '#f43f5e' : '#94a3b8'} />
-                <span>Alerts</span>
-              </div>
-              {alertCount > 0 && (
-                <span
-                  style={{
-                    background: '#f43f5e',
-                    color: '#ffffff',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    borderRadius: '10px',
-                    padding: '2px 7px',
-                    boxShadow: '0 0 10px rgba(244, 63, 94, 0.6)',
-                  }}
-                >
-                  {alertCount}
-                </span>
-              )}
-            </button>
+            <NavBtn
+              icon={Bell}
+              label="Alerts"
+              isActive={activeNav === 'alerts'}
+              badgeCount={unacknowledgedAlertsCount}
+              badgeColor="#f43f5e"
+              onClick={() => setActiveNav('alerts')}
+            />
+
+            <NavBtn
+              icon={Settings}
+              label="Settings"
+              isActive={activeNav === 'settings'}
+              onClick={() => setActiveNav('settings')}
+            />
           </div>
 
-          {/* Footer Settings Item */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '12px' }}>
-            <button
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                width: '100%',
-                padding: '9px 12px',
-                borderRadius: '8px',
-                border: 'none',
-                background: 'transparent',
-                color: '#64748b',
-                fontWeight: 500,
-                fontSize: '12px',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = '#94a3b8';
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = '#64748b';
-                e.currentTarget.style.background = 'transparent';
-              }}
-            >
-              <Settings size={15} />
-              <span>Settings</span>
-            </button>
-
-            <div style={{ padding: '0 12px', fontSize: '10px', color: '#475569' }}>
-              Twin Core v2.4 • EVS 2026
+          {/* Footer Metadata */}
+          <div style={{ borderTop: '1px solid #1e293b', paddingTop: '10px', paddingLeft: '8px' }}>
+            <div style={{ fontSize: '10px', color: '#475569', lineHeight: 1.3 }}>
+              Twin Architecture v3.0<br />
+              Floor 8 ICU Digital Twin
             </div>
           </div>
         </nav>
 
-        {/* Center / Full 3D Canvas Host Container */}
-        <main style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          {/* Level 1: Exterior */}
-          {level === 'level1_exterior' && (
-            <HospitalExterior3D
-              rooms={rooms}
-              onEnterFloor={() => setLevel('level2_lobby')}
-            />
-          )}
-
-          {/* Level 2: Lobby */}
-          {level === 'level2_lobby' && (
-            <HospitalLobby3D
-              rooms={rooms}
-              onEnterICUFloor={() => setLevel('level3_floor')}
-            />
-          )}
-
-          {/* Level 3: ICU Floor (Exact 3D Cutaway Matching Image 1) */}
-          {level === 'level3_floor' && (
+        {/* Dynamic Center Stage Area */}
+        <main style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex' }}>
+          {activeNav === 'icu_floor' && (
             <>
-              <HospitalFloor3D
-                rooms={rooms}
-                selectedRoomId={selectedRoomId}
-                onRoomClick={(id) => setSelectedRoomId(id)}
-                onSelectRoom={(id) => setSelectedRoomId(id)}
-              />
+              {/* 3D ICU Interactive Floor */}
+              <div style={{ flex: 1, height: '100%', position: 'relative' }}>
+                <HospitalFloor3D
+                  beds={beds}
+                  selectedRoomId={selectedRoomId}
+                  onSelectBed={(id) => setSelectedRoomId(id)}
+                />
+              </div>
 
-              {/* Right Side Telemetry Card (Matching Image 1) */}
-              <RoomTelemetryPanel
-                room={selectedRoomData}
-                onOpenAnalytics={() => setAnalyticsRoomId(selectedRoomId)}
-                onEnter1stPerson={() => setLevel('level4_room')}
+              {/* Contextual Patient Monitoring Panel (Right-side) */}
+              <PatientMonitoringPanel
+                bed={selectedBed}
+                onOpenDetailedAnalytics={() => setDetailedModalRoomId(selectedRoomId)}
+                onInspect3DRoom={() => setActiveNav('patient_vitals')}
               />
             </>
           )}
 
-          {/* Level 4: Room Interior */}
-          {level === 'level4_room' && (
-            <ICURoomInterior3D
-              room={selectedRoomData}
-              onOpenAnalytics={() => setAnalyticsRoomId(selectedRoomId || 'ICU-101')}
-            />
+          {activeNav === 'overview' && <OverviewView />}
+
+          {activeNav === 'patient_vitals' && (
+            <PatientVitalsView onOpenDetailedAnalytics={(id) => setDetailedModalRoomId(id)} />
           )}
+
+          {activeNav === 'alerts' && <AlertsView />}
+
+          {activeNav === 'settings' && <SettingsView />}
         </main>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════
-          3. DETAILED 60-MINUTE HISTORICAL CHART MODAL
+          3. DETAILED 60-MINUTE HISTORICAL ANALYTICS MODAL
       ══════════════════════════════════════════════════════════════ */}
-      {analyticsRoomId && (
-        <RoomDetailModal
-          roomId={analyticsRoomId}
-          onClose={() => setAnalyticsRoomId(null)}
-          liveReadings={lastTickReadings}
-        />
+      {detailedModalRoomId && (
+        <Suspense fallback={null}>
+          <RoomDetailModal
+            roomId={detailedModalRoomId}
+            onClose={() => setDetailedModalRoomId(null)}
+            liveReadings={beds.map((b) => ({
+              room_id: b.roomId,
+              pm25: b.currentAir.pm25,
+              pm10: b.currentAir.pm10,
+              co2: b.currentAir.co2,
+              temperature: b.currentAir.temperature,
+              humidity: b.currentAir.humidity,
+              status: b.status,
+            }))}
+          />
+        </Suspense>
       )}
     </div>
   );
 }
 
-/** Professional Sidebar Button with Smooth Hover / Active Transitions */
-function SidebarButton({ icon: Icon, label, isActive, onClick }) {
+export default function App() {
+  return (
+    <ICUProvider>
+      <MainLayout />
+    </ICUProvider>
+  );
+}
+
+function NavBtn({ icon: Icon, label, isActive, onClick, badgeCount, badgeColor }) {
   return (
     <button
       onClick={onClick}
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '10px',
+        justifyContent: 'space-between',
         width: '100%',
-        padding: '10px 12px',
-        borderRadius: '8px',
+        padding: '8px 10px',
+        borderRadius: '6px',
         border: 'none',
-        background: isActive
-          ? 'linear-gradient(90deg, rgba(2, 132, 199, 0.22) 0%, rgba(2, 132, 199, 0.04) 100%)'
-          : 'transparent',
+        background: isActive ? '#0e1d35' : 'transparent',
         borderLeft: isActive ? '3px solid #0ea5e9' : '3px solid transparent',
         color: isActive ? '#ffffff' : '#94a3b8',
         fontWeight: isActive ? 600 : 500,
-        fontSize: '13px',
+        fontSize: '12px',
         cursor: 'pointer',
-        transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)',
+        transition: 'all 0.15s ease',
         textAlign: 'left',
       }}
       onMouseEnter={(e) => {
         if (!isActive) {
-          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+          e.currentTarget.style.background = '#0e182c';
           e.currentTarget.style.color = '#ffffff';
         }
       }}
@@ -618,8 +385,25 @@ function SidebarButton({ icon: Icon, label, isActive, onClick }) {
         }
       }}
     >
-      <Icon size={17} color={isActive ? '#38bdf8' : '#94a3b8'} />
-      <span>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Icon size={15} color={isActive ? '#38bdf8' : '#64748b'} />
+        <span>{label}</span>
+      </div>
+
+      {badgeCount > 0 && (
+        <span
+          style={{
+            background: badgeColor || '#f43f5e',
+            color: '#ffffff',
+            fontSize: '10px',
+            fontWeight: 700,
+            borderRadius: '10px',
+            padding: '1px 6px',
+          }}
+        >
+          {badgeCount}
+        </span>
+      )}
     </button>
   );
 }

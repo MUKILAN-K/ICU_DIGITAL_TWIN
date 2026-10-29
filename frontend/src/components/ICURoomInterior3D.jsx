@@ -187,7 +187,7 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
 
     // ── 1. Scene Setup ───────────────────────────────────
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf1f5f9);
+    scene.background = new THREE.Color(0x0a1120);
 
     // ── 2. Camera Setup ───────────────────────────────────
     const camera = new THREE.PerspectiveCamera(70, container.clientWidth / container.clientHeight, 0.1, 100);

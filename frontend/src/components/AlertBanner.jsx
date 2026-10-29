@@ -1,146 +1,79 @@
 import React, { useState } from 'react';
-import { AlertTriangle, X, ChevronRight, ShieldAlert } from 'lucide-react';
+import { ShieldAlert, X, ChevronRight } from 'lucide-react';
 
-export default function AlertBanner({ alertRooms, onSelectRoom }) {
+export default function AlertBanner({ alertRooms = [], onSelectRoom }) {
   const [isDismissed, setIsDismissed] = useState(false);
 
   if (!alertRooms || alertRooms.length === 0 || isDismissed) return null;
 
   const count = alertRooms.length;
-  const roomNames = alertRooms.map(r => r.name || r.room_id).join(', ');
+  const primaryRoom = alertRooms[0];
+  const roomId = primaryRoom.roomId || primaryRoom.room_id || 'ICU-104';
+  const bedNum = primaryRoom.bedNumber || 'Bed 4';
 
   return (
     <div
       style={{
         position: 'absolute',
-        top: '72px',
+        top: '64px',
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 40,
-        maxWidth: '860px',
-        width: 'calc(100% - 40px)',
-        background: 'rgba(28, 12, 18, 0.92)',
-        backdropFilter: 'blur(16px)',
-        border: '1px solid rgba(244, 63, 94, 0.45)',
-        borderRadius: '12px',
-        padding: '10px 18px',
-        boxShadow: '0 10px 30px -5px rgba(244, 63, 94, 0.3), 0 4px 12px rgba(0, 0, 0, 0.5)',
+        maxWidth: '720px',
+        width: 'calc(100% - 32px)',
+        background: '#160d13',
+        border: '1px solid #e11d48',
+        borderRadius: '6px',
+        padding: '8px 14px',
+        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: '14px',
-        animation: 'slideDownAlert 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
-        fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
+        gap: '12px',
       }}
     >
-      <style>{`
-        @keyframes slideDownAlert {
-          from { opacity: 0; transform: translate(-50%, -12px); }
-          to { opacity: 1; transform: translate(-50%, 0); }
-        }
-      `}</style>
-
-      {/* Alert Icon & Text Content */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-        <div
-          style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '8px',
-            background: 'rgba(244, 63, 94, 0.2)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-          }}
-        >
-          <ShieldAlert size={18} color="#f43f5e" />
-        </div>
-
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span
-              style={{
-                fontSize: '13px',
-                fontWeight: 700,
-                color: '#f43f5e',
-                letterSpacing: '0.02em',
-                textTransform: 'uppercase',
-              }}
-            >
-              WHO Threshold Breach: {count} {count > 1 ? 'Suites' : 'Suite'} Critical
-            </span>
-            <span
-              style={{
-                width: '6px',
-                height: '6px',
-                borderRadius: '50%',
-                backgroundColor: '#f43f5e',
-                boxShadow: '0 0 6px #f43f5e',
-              }}
-            />
-          </div>
-          <div
-            style={{
-              fontSize: '12px',
-              color: '#cbd5e1',
-              marginTop: '1px',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            Immediate HVAC air exchange required for: <strong style={{ color: '#ffffff' }}>{roomNames}</strong>
-          </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+        <ShieldAlert size={16} color="#f43f5e" style={{ flexShrink: 0 }} />
+        <div style={{ fontSize: '12px', color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <strong style={{ color: '#f43f5e' }}>CRITICAL ALERT ({count}):</strong> {bedNum} ({roomId}) physiological threshold exceeded
         </div>
       </div>
 
-      {/* Action Buttons: Inspect & Dismiss */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-        {onSelectRoom && alertRooms.length > 0 && (
-          <button
-            onClick={() => onSelectRoom(alertRooms[0].room_id)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              background: 'rgba(244, 63, 94, 0.2)',
-              border: '1px solid rgba(244, 63, 94, 0.4)',
-              borderRadius: '6px',
-              padding: '6px 12px',
-              color: '#fecdd3',
-              fontSize: '11px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'background 0.15s ease',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(244, 63, 94, 0.35)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(244, 63, 94, 0.2)')}
-          >
-            <span>Inspect {alertRooms[0].room_id}</span>
-            <ChevronRight size={13} />
-          </button>
-        )}
+        <button
+          onClick={() => onSelectRoom(roomId)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '4px 10px',
+            borderRadius: '4px',
+            border: '1px solid #f43f5e',
+            background: 'rgba(244, 63, 94, 0.15)',
+            color: '#f8fafc',
+            fontSize: '11px',
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          <span>Triage Bed</span>
+          <ChevronRight size={13} />
+        </button>
 
         <button
           onClick={() => setIsDismissed(true)}
-          title="Dismiss notification"
           style={{
             background: 'transparent',
             border: 'none',
             color: '#94a3b8',
             cursor: 'pointer',
-            padding: '4px',
-            borderRadius: '6px',
+            padding: '2px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'color 0.15s ease',
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = '#ffffff')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = '#94a3b8')}
+          title="Dismiss banner"
         >
-          <X size={16} />
+          <X size={14} />
         </button>
       </div>
     </div>
