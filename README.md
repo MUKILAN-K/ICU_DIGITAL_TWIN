@@ -23,8 +23,7 @@ This system models indoor air quality (PM2.5, PM10, CO₂, temperature, humidity
 ## Getting Started
 
 ```bash
-# Backend
-cd backend
+# Backend (from project root)
 pip install -r requirements.txt
 uvicorn main:app --reload
 
