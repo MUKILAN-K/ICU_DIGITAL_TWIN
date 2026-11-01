@@ -30,34 +30,34 @@ const STATUS_COLORS = {
 };
 
 const ZOOM_PRESETS = {
+  wide: {
+    id: 'wide',
+    label: '0.75x Wide',
+    badge: 'Wide-Angle',
+    description: 'Expanded clinical overview of room & equipment (Default Initial View)',
+    camPos: new THREE.Vector3(0.2, 6.8, 9.4),
+    target: new THREE.Vector3(0, 1.2, -0.5),
+    fov: 85,
+    multiplier: 0.7,
+  },
   extra_zoom: {
     id: 'extra_zoom',
     label: '0.5x Full Room',
     badge: 'Extra Zoom',
     description: 'Ultra-wide panoramic coverage of the entire ICU room',
-    camPos: new THREE.Vector3(0, 6.2, 11.5),
-    target: new THREE.Vector3(0, 2.8, -0.5),
-    fov: 96,
+    camPos: new THREE.Vector3(0.2, 7.2, 10.5),
+    target: new THREE.Vector3(0, 1.2, -0.5),
+    fov: 92,
     multiplier: 0.5,
-  },
-  wide: {
-    id: 'wide',
-    label: '0.75x Wide',
-    badge: 'Wide-Angle',
-    description: 'Expanded interior view of room & equipment',
-    camPos: new THREE.Vector3(0, 4.8, 8.5),
-    target: new THREE.Vector3(0, 3.0, 0),
-    fov: 82,
-    multiplier: 0.75,
   },
   normal: {
     id: 'normal',
     label: '1.0x Normal',
     badge: 'Standard',
-    description: 'Natural clinician eye-level walk-in view',
-    camPos: new THREE.Vector3(0, 3.8, 6.0),
-    target: new THREE.Vector3(0, 3.0, 0),
-    fov: 70,
+    description: 'Clinician eye-level perspective looking toward center of room',
+    camPos: new THREE.Vector3(0.2, 4.6, 6.8),
+    target: new THREE.Vector3(0, 1.4, -0.4),
+    fov: 72,
     multiplier: 1.0,
   },
   focus: {
@@ -66,7 +66,7 @@ const ZOOM_PRESETS = {
     badge: 'Telemetry Unit',
     description: 'Close inspection of patient monitors & consoles',
     camPos: new THREE.Vector3(0.1, 2.8, 3.2),
-    target: new THREE.Vector3(0, 2.5, 0),
+    target: new THREE.Vector3(0, 1.8, 0),
     fov: 52,
     multiplier: 1.6,
   },
@@ -92,9 +92,10 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
   const animTargetRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
-  const [zoomMultiplier, setZoomMultiplier] = useState(1.0);
-  const [isExtraZoom, setIsExtraZoom] = useState(false);
-  const [activePreset, setActivePreset] = useState('normal');
+  // Default to the appealing elevated wide view (Image 2) on initial entrance
+  const [zoomMultiplier, setZoomMultiplier] = useState(0.7);
+  const [isExtraZoom, setIsExtraZoom] = useState(true);
+  const [activePreset, setActivePreset] = useState('wide');
 
   useEffect(() => { roomRef.current = room; }, [room]);
 
@@ -114,7 +115,7 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
 
     setActivePreset(presetId);
     setZoomMultiplier(preset.multiplier);
-    setIsExtraZoom(presetId === 'extra_zoom');
+    setIsExtraZoom(presetId === 'extra_zoom' || presetId === 'wide');
 
     flyTo(preset.camPos, preset.target, preset.fov);
   }, [flyTo]);
@@ -124,7 +125,7 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
     if (isExtraZoom) {
       handleSelectPreset('normal');
     } else {
-      handleSelectPreset('extra_zoom');
+      handleSelectPreset('wide');
     }
   }, [isExtraZoom, handleSelectPreset]);
 
@@ -133,26 +134,20 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
     const val = parseFloat(e.target.value);
     setZoomMultiplier(val);
     setActivePreset('custom');
-    setIsExtraZoom(val <= 0.6);
+    setIsExtraZoom(val <= 0.75);
 
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     if (!camera || !controls) return;
 
-    // Calculate distance and FOV mapped from multiplier
-    // At 0.4x: dist ~10.5, fov ~98
-    // At 1.0x: dist ~4.5, fov ~68
-    // At 2.2x: dist ~1.9, fov ~45
     const baseDist = 6.0;
     const targetDist = Math.max(1.5, Math.min(24.0, baseDist / val));
 
     // Dynamic FOV mapping: wider FOV when zoomed out to cover entire room
     let targetFov = 68;
     if (val < 1.0) {
-      // Zooming out: widen FOV from 68 to 102
       targetFov = 68 + (1.0 - val) * 55;
     } else {
-      // Zooming in: narrow FOV from 68 to 44
       targetFov = Math.max(44, 68 - (val - 1.0) * 20);
     }
 
@@ -163,7 +158,6 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
     dir.normalize();
 
     const newPos = new THREE.Vector3().addVectors(controls.target, dir.multiplyScalar(targetDist));
-    // Keep above floor
     newPos.y = Math.max(0.4, newPos.y);
 
     flyTo(newPos, controls.target, targetFov);
@@ -176,9 +170,9 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
     handleSliderChange({ target: { value: nextVal } });
   }, [zoomMultiplier, handleSliderChange]);
 
-  // ── Reset to Standard View ──────────────────────────────
+  // ── Reset to Initial Default View (Image 2 Aspect) ──────
   const handleReset = useCallback(() => {
-    handleSelectPreset('normal');
+    handleSelectPreset('wide');
   }, [handleSelectPreset]);
 
   useEffect(() => {
@@ -189,9 +183,10 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a1120);
 
-    // ── 2. Camera Setup ───────────────────────────────────
-    const camera = new THREE.PerspectiveCamera(70, container.clientWidth / container.clientHeight, 0.1, 100);
-    camera.position.set(0, 3.8, 6.0);
+    // ── 2. Camera Setup (Initialized to Image 2 Aspect) ───
+    // Elevated 3/4 perspective looking down at room center
+    const camera = new THREE.PerspectiveCamera(85, container.clientWidth / container.clientHeight, 0.1, 100);
+    camera.position.set(0.2, 6.8, 9.4);
     cameraRef.current = camera;
 
     // ── 3. Renderer ───────────────────────────────────────
@@ -204,18 +199,18 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
     renderer.toneMappingExposure = 1.25;
     container.appendChild(renderer.domElement);
 
-    // ── 4. OrbitControls with Expanded Zoom Range ────────
+    // ── 4. OrbitControls ──────────────────────────────────
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
-    controls.target.set(0, 3.0, 0);
+    // Target is focused on the central equipment / pedestal near floor level
+    controls.target.set(0, 1.2, -0.5);
 
-    // UNLOCKED ZOOM LIMITS: Allow complete room zoom out up to 32.0 units!
     controls.minDistance = 0.15;
     controls.maxDistance = 32.0;
-    controls.maxPolarAngle = Math.PI / 1.88; // Don't clip under the floor
-    controls.minPolarAngle = 0.05;          // Allow overhead bird's eye view
-    controls.enablePan = true;              // Allow right-click / 2-finger panning across room
+    controls.maxPolarAngle = Math.PI / 1.88;
+    controls.minPolarAngle = 0.05;
+    controls.enablePan = true;
     controls.panSpeed = 0.8;
     controls.rotateSpeed = 0.7;
     controlsRef.current = controls;
@@ -265,6 +260,9 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
           if (child.isMesh) {
             child.castShadow = true;
             child.receiveShadow = true;
+            if (child.material) {
+              child.material.side = THREE.DoubleSide;
+            }
           }
         });
 
@@ -279,18 +277,16 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
     );
 
     // ── 7. Dynamic Mouse Wheel Zoom Extension ────────────
-    // When scrolling out past distance 5.0, dynamically widen FOV
-    // so user gets limitless panoramic room coverage with the scroll wheel!
     let updateScheduled = false;
     const handleControlsChange = () => {
-      if (animTargetRef.current) return; // Ignore during programmatic transitions
+      if (animTargetRef.current) return;
 
       const dist = camera.position.distanceTo(controls.target);
 
       // If scrolling far out, dynamically expand FOV up to 98°
       if (dist > 6.5) {
         const extraRatio = Math.min(1.0, (dist - 6.5) / 10.0);
-        const dynamicFov = 70 + extraRatio * 28; // 70° -> 98°
+        const dynamicFov = 70 + extraRatio * 28;
         if (Math.abs(camera.fov - dynamicFov) > 0.5) {
           camera.fov = dynamicFov;
           camera.updateProjectionMatrix();
@@ -307,7 +303,7 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
         requestAnimationFrame(() => {
           const effectiveMul = +(Math.max(0.4, Math.min(2.4, 6.0 / Math.max(1.0, dist)))).toFixed(2);
           setZoomMultiplier(effectiveMul);
-          setIsExtraZoom(dist > 7.5 || camera.fov >= 85);
+          setIsExtraZoom(dist > 7.5 || camera.fov >= 82);
           updateScheduled = false;
         });
       }
@@ -392,7 +388,7 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
   }, []);
 
   const r = room || {
-    room_id: 'ICU-101',
+    room_id: 'ICU-03',
     status: 'safe',
     latest_reading: {
       pm25: 12.4,
@@ -507,7 +503,7 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
           <button
             className="icu-reset-btn"
             onClick={handleReset}
-            title="Reset Camera to Standard View"
+            title="Reset Camera to Default Panoramic View"
             id="btn-zoom-reset"
           >
             <RotateCcw size={12} />
@@ -540,12 +536,12 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
         </div>
 
         <h4 className="hud-room-name">
-          {r.room_id === 'ICU-101' && 'Isolation Unit 1 (Negative Pressure)'}
-          {r.room_id === 'ICU-102' && 'General ICU Room A'}
-          {r.room_id === 'ICU-103' && 'General ICU Room B'}
-          {r.room_id === 'ICU-104' && 'High Occupancy Suite'}
-          {r.room_id === 'ICU-105' && 'Post-Op Recovery Room'}
-          {!['ICU-101', 'ICU-102', 'ICU-103', 'ICU-104', 'ICU-105'].includes(r.room_id) && 'ICU Operating Suite'}
+          {r.room_id === 'ICU-01' && 'Isolation Unit 1 (Negative Pressure)'}
+          {r.room_id === 'ICU-02' && 'Cardiothoracic Intensive Suite'}
+          {r.room_id === 'ICU-03' && 'Operating & Trauma Recovery Suite'}
+          {r.room_id === 'ICU-04' && 'High-Dependency Respiratory Unit'}
+          {r.room_id === 'ICU-05' && 'Post-Surgical Critical Care'}
+          {!['ICU-01', 'ICU-02', 'ICU-03', 'ICU-04', 'ICU-05'].includes(r.room_id) && 'ICU Operating Suite'}
         </h4>
 
         <div className="hud-metrics-grid">
