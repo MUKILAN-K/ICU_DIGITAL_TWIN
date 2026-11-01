@@ -13,13 +13,11 @@ import {
   LineChart,
   ZoomIn,
   ZoomOut,
-  Maximize2,
   RotateCcw,
   Scan,
-  Sliders,
-  Expand,
-  Eye,
-  Layers,
+  Maximize2,
+  Lock,
+  Compass,
 } from 'lucide-react';
 
 const STATUS_COLORS = {
@@ -29,56 +27,47 @@ const STATUS_COLORS = {
   unknown: { base: 0x0284c7, dim: 0x0f172a },
 };
 
+// ── Bounded Interior Presets (100% Inside the Room Envelope) ─────────
 const ZOOM_PRESETS = {
-  extra_zoom: {
-    id: 'extra_zoom',
-    label: '0.5x Full Room',
-    badge: 'Extra Zoom',
-    description: 'Ultra-wide panoramic coverage of the entire ICU room',
-    camPos: new THREE.Vector3(0, 6.2, 11.5),
-    target: new THREE.Vector3(0, 2.8, -0.5),
-    fov: 96,
-    multiplier: 0.5,
-  },
-  wide: {
-    id: 'wide',
-    label: '0.75x Wide',
-    badge: 'Wide-Angle',
-    description: 'Expanded interior view of room & equipment',
-    camPos: new THREE.Vector3(0, 4.8, 8.5),
-    target: new THREE.Vector3(0, 3.0, 0),
-    fov: 82,
-    multiplier: 0.75,
-  },
-  normal: {
-    id: 'normal',
-    label: '1.0x Normal',
-    badge: 'Standard',
-    description: 'Natural clinician eye-level walk-in view',
-    camPos: new THREE.Vector3(0, 3.8, 6.0),
-    target: new THREE.Vector3(0, 3.0, 0),
-    fov: 70,
+  full_room: {
+    id: 'full_room',
+    label: 'Room Overview',
+    badge: 'Interior Bounded',
+    description: 'Panoramic clinical vantage from inside the doorway showing entire room, bed, and consoles',
+    camPos: new THREE.Vector3(0, 2.7, 4.6),
+    target: new THREE.Vector3(0, 1.8, -0.4),
+    fov: 74,
     multiplier: 1.0,
   },
-  focus: {
-    id: 'focus',
-    label: '1.6x Focus',
-    badge: 'Telemetry Unit',
-    description: 'Close inspection of patient monitors & consoles',
-    camPos: new THREE.Vector3(0.1, 2.8, 3.2),
-    target: new THREE.Vector3(0, 2.5, 0),
+  bedside: {
+    id: 'bedside',
+    label: 'Bedside View',
+    badge: 'Clinical Care',
+    description: 'Bedside patient care perspective for close observation',
+    camPos: new THREE.Vector3(1.3, 1.9, 1.9),
+    target: new THREE.Vector3(0, 1.6, -0.2),
+    fov: 58,
+    multiplier: 1.35,
+  },
+  telemetry: {
+    id: 'telemetry',
+    label: 'Monitors & Vitals',
+    badge: 'Diagnostic',
+    description: 'Focused inspection of vital signs telemetry, anesthesia console, and ventilator',
+    camPos: new THREE.Vector3(-1.3, 2.0, 1.7),
+    target: new THREE.Vector3(-0.5, 1.8, -0.6),
     fov: 52,
     multiplier: 1.6,
   },
-  bird_eye: {
-    id: 'bird_eye',
-    label: 'Bird’s Eye',
-    badge: 'Top-Down',
-    description: 'High overhead architectural ceiling view of room layout',
-    camPos: new THREE.Vector3(0, 14.5, 0.05),
-    target: new THREE.Vector3(0, 1.0, 0),
-    fov: 80,
-    multiplier: 0.6,
+  elevated: {
+    id: 'elevated',
+    label: 'Elevated Clinic',
+    badge: 'Upper Angle',
+    description: 'Elevated clinical angle looking across the ICU suite beneath ceiling plane',
+    camPos: new THREE.Vector3(0.1, 4.0, 3.8),
+    target: new THREE.Vector3(0, 1.6, -0.4),
+    fov: 68,
+    multiplier: 1.1,
   },
 };
 
@@ -93,12 +82,11 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
 
   const [loading, setLoading] = useState(true);
   const [zoomMultiplier, setZoomMultiplier] = useState(1.0);
-  const [isExtraZoom, setIsExtraZoom] = useState(false);
-  const [activePreset, setActivePreset] = useState('normal');
+  const [activePreset, setActivePreset] = useState('full_room');
 
   useEffect(() => { roomRef.current = room; }, [room]);
 
-  // ── Set target animation smoothly ───────────────────────
+  // ── Smooth Animation to New Camera Target ─────────────────
   const flyTo = useCallback((camPos, target, fov) => {
     animTargetRef.current = {
       camPos: camPos ? camPos.clone() : null,
@@ -114,47 +102,25 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
 
     setActivePreset(presetId);
     setZoomMultiplier(preset.multiplier);
-    setIsExtraZoom(presetId === 'extra_zoom');
-
     flyTo(preset.camPos, preset.target, preset.fov);
   }, [flyTo]);
 
-  // ── Toggle Extra Zoom (Wide Room Cover) ─────────────────
-  const handleToggleExtraZoom = useCallback(() => {
-    if (isExtraZoom) {
-      handleSelectPreset('normal');
-    } else {
-      handleSelectPreset('extra_zoom');
-    }
-  }, [isExtraZoom, handleSelectPreset]);
-
-  // ── Handle Slider Change (Continuous Zoom) ──────────────
+  // ── Continuous Zoom Slider (Strictly bounded inside room) ─
   const handleSliderChange = useCallback((e) => {
     const val = parseFloat(e.target.value);
     setZoomMultiplier(val);
     setActivePreset('custom');
-    setIsExtraZoom(val <= 0.6);
 
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     if (!camera || !controls) return;
 
-    // Calculate distance and FOV mapped from multiplier
-    // At 0.4x: dist ~10.5, fov ~98
-    // At 1.0x: dist ~4.5, fov ~68
-    // At 2.2x: dist ~1.9, fov ~45
-    const baseDist = 6.0;
-    const targetDist = Math.max(1.5, Math.min(24.0, baseDist / val));
+    // Base target distance inside room: from 2.4 (zoomed in) to 5.4 (zoomed out)
+    const baseDist = 4.8;
+    const targetDist = Math.max(2.2, Math.min(5.6, baseDist / val));
 
-    // Dynamic FOV mapping: wider FOV when zoomed out to cover entire room
-    let targetFov = 68;
-    if (val < 1.0) {
-      // Zooming out: widen FOV from 68 to 102
-      targetFov = 68 + (1.0 - val) * 55;
-    } else {
-      // Zooming in: narrow FOV from 68 to 44
-      targetFov = Math.max(44, 68 - (val - 1.0) * 20);
-    }
+    // Smooth bounded FOV adjustment: 50° to 76° (never wide enough to distort outside walls)
+    const targetFov = THREE.MathUtils.clamp(74 - (val - 1.0) * 22, 50, 76);
 
     const dir = new THREE.Vector3().subVectors(camera.position, controls.target);
     if (dir.lengthSq() < 0.001) {
@@ -163,22 +129,24 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
     dir.normalize();
 
     const newPos = new THREE.Vector3().addVectors(controls.target, dir.multiplyScalar(targetDist));
-    // Keep above floor
-    newPos.y = Math.max(0.4, newPos.y);
+    // Hard clamp to keep camera safely inside the room boundaries
+    newPos.x = THREE.MathUtils.clamp(newPos.x, -3.8, 3.8);
+    newPos.y = THREE.MathUtils.clamp(newPos.y, 0.8, 4.6);
+    newPos.z = THREE.MathUtils.clamp(newPos.z, -3.6, 4.8);
 
     flyTo(newPos, controls.target, targetFov);
   }, [flyTo]);
 
   // ── Step Zoom (+ / -) ──────────────────────────────────
   const handleStepZoom = useCallback((direction) => {
-    const step = direction === 'in' ? 0.2 : -0.2;
-    const nextVal = Math.max(0.4, Math.min(2.4, +(zoomMultiplier + step).toFixed(2)));
+    const step = direction === 'in' ? 0.15 : -0.15;
+    const nextVal = Math.max(0.8, Math.min(2.0, +(zoomMultiplier + step).toFixed(2)));
     handleSliderChange({ target: { value: nextVal } });
   }, [zoomMultiplier, handleSliderChange]);
 
-  // ── Reset to Standard View ──────────────────────────────
+  // ── Reset to Standard Full Room Overview ────────────────
   const handleReset = useCallback(() => {
-    handleSelectPreset('normal');
+    handleSelectPreset('full_room');
   }, [handleSelectPreset]);
 
   useEffect(() => {
@@ -187,11 +155,12 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
 
     // ── 1. Scene Setup ───────────────────────────────────
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a1120);
+    // Warm clinical slate backdrop that seamlessly matches the hospital suite
+    scene.background = new THREE.Color(0x0f172a);
 
-    // ── 2. Camera Setup ───────────────────────────────────
-    const camera = new THREE.PerspectiveCamera(70, container.clientWidth / container.clientHeight, 0.1, 100);
-    camera.position.set(0, 3.8, 6.0);
+    // ── 2. Camera Setup (Bounded Inside Room) ─────────────
+    const camera = new THREE.PerspectiveCamera(74, container.clientWidth / container.clientHeight, 0.1, 80);
+    camera.position.set(0, 2.7, 4.6);
     cameraRef.current = camera;
 
     // ── 3. Renderer ───────────────────────────────────────
@@ -204,35 +173,35 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
     renderer.toneMappingExposure = 1.25;
     container.appendChild(renderer.domElement);
 
-    // ── 4. OrbitControls with Expanded Zoom Range ────────
+    // ── 4. OrbitControls with STRICT Room Boundaries ─────
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.06;
-    controls.target.set(0, 3.0, 0);
+    controls.dampingFactor = 0.07;
+    controls.target.set(0, 1.8, -0.4);
 
-    // UNLOCKED ZOOM LIMITS: Allow complete room zoom out up to 32.0 units!
-    controls.minDistance = 0.15;
-    controls.maxDistance = 32.0;
-    controls.maxPolarAngle = Math.PI / 1.88; // Don't clip under the floor
-    controls.minPolarAngle = 0.05;          // Allow overhead bird's eye view
-    controls.enablePan = true;              // Allow right-click / 2-finger panning across room
-    controls.panSpeed = 0.8;
-    controls.rotateSpeed = 0.7;
+    // STRICT INTERIOR LIMITS: Camera cannot back through the rear wall!
+    controls.minDistance = 1.4;
+    controls.maxDistance = 5.6; // Strictly stops before penetrating back wall
+    controls.maxPolarAngle = Math.PI / 2.05; // Never clips beneath floor
+    controls.minPolarAngle = 0.25;          // Never clips through ceiling
+    controls.enablePan = true;
+    controls.panSpeed = 0.5;
+    controls.rotateSpeed = 0.6;
     controlsRef.current = controls;
 
     // ── 5. Bright Clinical Lighting ───────────────────────
-    scene.add(new THREE.AmbientLight(0xffffff, 1.15));
+    scene.add(new THREE.AmbientLight(0xffffff, 1.25));
 
-    const ceilingSun = new THREE.DirectionalLight(0xfffbeb, 1.6);
-    ceilingSun.position.set(0, 10, 0);
+    const ceilingSun = new THREE.DirectionalLight(0xfffbeb, 1.8);
+    ceilingSun.position.set(0, 8, 0);
     scene.add(ceilingSun);
 
-    const fillLight = new THREE.DirectionalLight(0xe0f2fe, 0.8);
-    fillLight.position.set(5, 6, 8);
+    const fillLight = new THREE.DirectionalLight(0xe0f2fe, 0.85);
+    fillLight.position.set(4, 5, 5);
     scene.add(fillLight);
 
-    const statusLight = new THREE.PointLight(0x10b981, 2.5, 35);
-    statusLight.position.set(0, 4.0, 0);
+    const statusLight = new THREE.PointLight(0x10b981, 2.0, 25);
+    statusLight.position.set(0, 3.5, 0);
     scene.add(statusLight);
     statusLightRef.current = statusLight;
 
@@ -243,7 +212,7 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
       (gltf) => {
         const model = gltf.scene;
 
-        // Scale model first so bounding box accurately reflects world units
+        // Scale model accurately so room dimensions fit clinical world units
         const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z);
@@ -261,10 +230,14 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
         model.position.y = -scaledBox.min.y;
         model.position.z = -scaledCenter.z;
 
+        // DoubleSide rendering ensures no wall or fixture becomes invisible void
         model.traverse((child) => {
           if (child.isMesh) {
             child.castShadow = true;
             child.receiveShadow = true;
+            if (child.material) {
+              child.material.side = THREE.DoubleSide;
+            }
           }
         });
 
@@ -278,36 +251,19 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
       }
     );
 
-    // ── 7. Dynamic Mouse Wheel Zoom Extension ────────────
-    // When scrolling out past distance 5.0, dynamically widen FOV
-    // so user gets limitless panoramic room coverage with the scroll wheel!
+    // ── 7. Orbit Controls Change Listener ────────────────
     let updateScheduled = false;
     const handleControlsChange = () => {
-      if (animTargetRef.current) return; // Ignore during programmatic transitions
+      if (animTargetRef.current) return;
 
       const dist = camera.position.distanceTo(controls.target);
 
-      // If scrolling far out, dynamically expand FOV up to 98°
-      if (dist > 6.5) {
-        const extraRatio = Math.min(1.0, (dist - 6.5) / 10.0);
-        const dynamicFov = 70 + extraRatio * 28; // 70° -> 98°
-        if (Math.abs(camera.fov - dynamicFov) > 0.5) {
-          camera.fov = dynamicFov;
-          camera.updateProjectionMatrix();
-        }
-      } else if (camera.fov > 70 && dist <= 6.5) {
-        const restoreRatio = Math.max(0, dist / 6.5);
-        camera.fov = 70 + (camera.fov - 70) * restoreRatio;
-        camera.updateProjectionMatrix();
-      }
-
-      // Sync UI slider state (throttled)
+      // Throttled UI sync
       if (!updateScheduled) {
         updateScheduled = true;
         requestAnimationFrame(() => {
-          const effectiveMul = +(Math.max(0.4, Math.min(2.4, 6.0 / Math.max(1.0, dist)))).toFixed(2);
+          const effectiveMul = +(Math.max(0.8, Math.min(2.0, 4.8 / Math.max(1.0, dist)))).toFixed(2);
           setZoomMultiplier(effectiveMul);
-          setIsExtraZoom(dist > 7.5 || camera.fov >= 85);
           updateScheduled = false;
         });
       }
@@ -315,7 +271,7 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
 
     controls.addEventListener('change', handleControlsChange);
 
-    // ── 8. Animation Loop ────────────────────────────────
+    // ── 8. Animation Loop with Hard Camera Enclosure Clamping ─
     const clock = new THREE.Clock();
 
     function animate() {
@@ -347,7 +303,17 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
         }
       }
 
-      // Update room status ambient light glow inside room
+      // Hard Boundary Safety Clamping: Ensure camera never leaves room enclosure
+      camera.position.x = THREE.MathUtils.clamp(camera.position.x, -3.9, 3.9);
+      camera.position.y = THREE.MathUtils.clamp(camera.position.y, 0.7, 4.6);
+      camera.position.z = THREE.MathUtils.clamp(camera.position.z, -3.8, 4.8);
+
+      // Keep OrbitControls target centered in patient care zone
+      controls.target.x = THREE.MathUtils.clamp(controls.target.x, -1.8, 1.8);
+      controls.target.y = THREE.MathUtils.clamp(controls.target.y, 0.8, 2.8);
+      controls.target.z = THREE.MathUtils.clamp(controls.target.z, -2.5, 1.5);
+
+      // Pulse room status ambient light
       if (statusLightRef.current) {
         const currRoom = roomRef.current;
         const status = currRoom ? currRoom.status : 'safe';
@@ -360,7 +326,7 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
 
         const pulse = Math.sin(elapsed * speed) * 0.3 + 0.7;
         statusLightRef.current.color.lerp(targetColor, delta * 4);
-        statusLightRef.current.intensity = 1.5 + pulse * 1.0;
+        statusLightRef.current.intensity = 1.6 + pulse * 0.8;
       }
 
       controls.update();
@@ -392,7 +358,7 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
   }, []);
 
   const r = room || {
-    room_id: 'ICU-101',
+    room_id: 'ICU-03',
     status: 'safe',
     latest_reading: {
       pm25: 12.4,
@@ -408,10 +374,10 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
 
   return (
     <div className="scene-3d-container daytime-exterior-container" style={{ width: '100%', height: '100%', borderRadius: 0, border: 'none' }}>
-      {/* Level Label */}
+      {/* Top Banner Tag */}
       <div className="scene-3d-label daytime-label">
         <span className="scene-3d-label-icon">🛏️</span>
-        LEVEL 4 — {r.room_id} 3D OPERATING / ICU ROOM INTERIOR
+        LEVEL 4 — {r.room_id} 3D CLINICAL SUITE • INTERIOR PERSPECTIVE
       </div>
 
       {loading && (
@@ -426,33 +392,39 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
 
       {/* Floating Navigation Tip Toast */}
       <div className="icu-nav-hint-toast">
-        <Scan size={13} color="#38bdf8" />
+        <Lock size={12} color="#10b981" />
         <span>
-          <strong>Scroll or Extra Zoom</strong> to cover entire room • <strong>Right-Click Drag</strong> to pan • <strong>Left-Click Drag</strong> to rotate
+          <strong>Interior Bounded View</strong> • Left-Click Drag to rotate inside room • Right-Click to pan • Scroll to zoom (strictly enclosed)
         </span>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════
-          EXTRA ZOOM & CAMERA NAVIGATION CONTROL BAR (Bottom Center)
+          CLINICAL INTERIOR CAMERA TOOLBAR (Bottom Center)
       ══════════════════════════════════════════════════════════════ */}
       <div className="icu-zoom-control-bar" role="toolbar" aria-label="ICU Room Zoom Controls">
-        {/* Primary Glowing 'Extra Zoom' Toggle Button */}
-        <button
-          className={`icu-extra-zoom-toggle-btn ${isExtraZoom ? 'active' : ''}`}
-          onClick={handleToggleExtraZoom}
-          title="Toggle Extra Zoom Mode: Expands camera to an ultra-wide panoramic angle that covers the entire ICU room"
-          id="btn-extra-zoom-toggle"
+        {/* Status Badge: Interior Enclosed */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 10px',
+            background: 'rgba(16, 185, 129, 0.12)',
+            border: '1px solid rgba(16, 185, 129, 0.3)',
+            borderRadius: '6px',
+            fontSize: '11px',
+            fontWeight: 700,
+            color: '#10b981',
+          }}
+          title="Camera is locked strictly within the room walls to prevent going out of bounds"
         >
-          <Expand size={15} />
-          <span>EXTRA ZOOM</span>
-          <span className="icu-extra-zoom-badge">
-            {isExtraZoom ? 'FULL ROOM ON' : 'WIDE COVER'}
-          </span>
-        </button>
+          <Lock size={13} />
+          <span>ROOM BOUNDS LOCKED</span>
+        </div>
 
         <div className="icu-zoom-divider" />
 
-        {/* Quick Zoom Presets */}
+        {/* Quick Clinical Camera Presets */}
         <div className="icu-zoom-presets-group">
           {Object.values(ZOOM_PRESETS).map((p) => (
             <button
@@ -468,12 +440,12 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
 
         <div className="icu-zoom-divider" />
 
-        {/* Continuous Zoom Slider & Step Buttons */}
+        {/* Bounded Zoom Slider & Step Controls */}
         <div className="icu-slider-container">
           <button
             className="icu-step-btn"
             onClick={() => handleStepZoom('out')}
-            title="Zoom Out (Expand Room View)"
+            title="Zoom Out (Bounded inside room)"
             id="btn-zoom-out"
           >
             <ZoomOut size={14} />
@@ -481,20 +453,20 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
 
           <input
             type="range"
-            min="0.4"
-            max="2.2"
+            min="0.8"
+            max="2.0"
             step="0.05"
             value={zoomMultiplier}
             onChange={handleSliderChange}
             className="icu-zoom-slider-range"
-            title={`Zoom Level: ${zoomMultiplier.toFixed(1)}x`}
+            title={`Zoom Level: ${zoomMultiplier.toFixed(2)}x`}
             id="slider-room-zoom"
           />
 
           <button
             className="icu-step-btn"
             onClick={() => handleStepZoom('in')}
-            title="Zoom In (Inspect Equipment)"
+            title="Zoom In (Inspect Bed & Monitor)"
             id="btn-zoom-in"
           >
             <ZoomIn size={14} />
@@ -507,7 +479,7 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
           <button
             className="icu-reset-btn"
             onClick={handleReset}
-            title="Reset Camera to Standard View"
+            title="Reset to Full Room Overview"
             id="btn-zoom-reset"
           >
             <RotateCcw size={12} />
@@ -532,20 +504,20 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
           <button
             className="hud-analytics-btn"
             onClick={onOpenAnalytics}
-            title="Open 60-Minute Detailed Chart Analytics"
+            title="Open Detailed Analytics"
           >
             <LineChart size={13} />
-            <span>60-Min Analytics</span>
+            <span>Analytics</span>
           </button>
         </div>
 
         <h4 className="hud-room-name">
-          {r.room_id === 'ICU-101' && 'Isolation Unit 1 (Negative Pressure)'}
-          {r.room_id === 'ICU-102' && 'General ICU Room A'}
-          {r.room_id === 'ICU-103' && 'General ICU Room B'}
-          {r.room_id === 'ICU-104' && 'High Occupancy Suite'}
-          {r.room_id === 'ICU-105' && 'Post-Op Recovery Room'}
-          {!['ICU-101', 'ICU-102', 'ICU-103', 'ICU-104', 'ICU-105'].includes(r.room_id) && 'ICU Operating Suite'}
+          {r.room_id === 'ICU-01' && 'Isolation Unit 1 (Negative Pressure)'}
+          {r.room_id === 'ICU-02' && 'Cardiothoracic Intensive Suite'}
+          {r.room_id === 'ICU-03' && 'Operating & Trauma Recovery Suite'}
+          {r.room_id === 'ICU-04' && 'High-Dependency Respiratory Unit'}
+          {r.room_id === 'ICU-05' && 'Post-Surgical Critical Care'}
+          {!['ICU-01', 'ICU-02', 'ICU-03', 'ICU-04', 'ICU-05'].includes(r.room_id) && 'ICU Operating Suite'}
         </h4>
 
         <div className="hud-metrics-grid">

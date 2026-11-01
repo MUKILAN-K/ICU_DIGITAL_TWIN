@@ -359,3 +359,4 @@ def generate_room_forecast(
             "configured_warning_limit": param_thresh.get("warning_max"),
         },
     }
+

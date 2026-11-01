@@ -1,9 +1,10 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Building2, Compass, Layers, ArrowRight, ShieldCheck, Activity } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════════════
-//  PROCEDURAL TEXTURE GENERATORS FOR HOSPITAL EXTERIOR
+//  PROCEDURAL TEXTURE GENERATORS MATCHING ARCHITECTURAL REFERENCE
 // ══════════════════════════════════════════════════════════════════════
 
 /** Sky Dome Texture */
@@ -13,11 +14,11 @@ function createSkyTexture() {
   c.height = 512;
   const ctx = c.getContext('2d');
   const g = ctx.createLinearGradient(0, 0, 0, 512);
-  g.addColorStop(0, '#0a2342');
-  g.addColorStop(0.3, '#1d5a8a');
-  g.addColorStop(0.65, '#4fa8d8');
-  g.addColorStop(0.85, '#93d2ed');
-  g.addColorStop(1, '#cde9f6');
+  g.addColorStop(0, '#1e3a8a');
+  g.addColorStop(0.25, '#3b82f6');
+  g.addColorStop(0.6, '#93c5fd');
+  g.addColorStop(0.85, '#bfdbfe');
+  g.addColorStop(1, '#e0f2fe');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 128, 512);
   const tex = new THREE.CanvasTexture(c);
@@ -25,19 +26,129 @@ function createSkyTexture() {
   return tex;
 }
 
-/** Architectural Glass Curtain-Wall Facade Texture */
-function createCurtainWallTexture() {
+/**
+ * Procedural Chevron Accordion / Zig-Zag Facade Texture
+ * Exactly reproduces the distinctive faceted white/grey pleats & vertical windows
+ * visible in the reference architectural photo.
+ */
+function createChevronFacadeTexture() {
   const c = document.createElement('canvas');
   c.width = 1024;
   c.height = 1024;
   const ctx = c.getContext('2d');
 
-  ctx.fillStyle = '#0f2438';
+  // Base off-white background
+  ctx.fillStyle = '#f1f5f9';
   ctx.fillRect(0, 0, 1024, 1024);
 
-  const cols = 8;
+  const numBays = 16;
+  const bayW = 1024 / numBays;
+  const numFloors = 4;
+  const floorH = 1024 / numFloors;
+
+  // Draw 4 floors with horizontal reveal seams
+  for (let fl = 0; fl < numFloors; fl++) {
+    const yTop = fl * floorH;
+
+    for (let b = 0; b < numBays; b++) {
+      const xLeft = b * bayW;
+      const xMid = xLeft + bayW * 0.5;
+      const xRight = xLeft + bayW;
+
+      // Facet A (Sunlit Left Side of the Chevron / Accordion fold)
+      const gradA = ctx.createLinearGradient(xLeft, yTop, xMid, yTop);
+      gradA.addColorStop(0, '#ffffff');
+      gradA.addColorStop(0.5, '#f8fafc');
+      gradA.addColorStop(1, '#e2e8f0');
+      ctx.fillStyle = gradA;
+      ctx.beginPath();
+      ctx.moveTo(xLeft, yTop);
+      ctx.lineTo(xMid, yTop + floorH * 0.5);
+      ctx.lineTo(xLeft, yTop + floorH);
+      ctx.closePath();
+      ctx.fill();
+
+      // Facet B (Shadowed Right Side of the Chevron / Accordion fold)
+      const gradB = ctx.createLinearGradient(xMid, yTop, xRight, yTop);
+      gradB.addColorStop(0, '#94a3b8');
+      gradB.addColorStop(0.5, '#cbd5e1');
+      gradB.addColorStop(1, '#64748b');
+      ctx.fillStyle = gradB;
+      ctx.beginPath();
+      ctx.moveTo(xMid, yTop + floorH * 0.5);
+      ctx.lineTo(xRight, yTop);
+      ctx.lineTo(xRight, yTop + floorH);
+      ctx.closePath();
+      ctx.fill();
+
+      // Vertical Window Strips embedded in the faceted bay
+      const winW = bayW * 0.22;
+      const winH = floorH * 0.72;
+      const winX = xLeft + (bayW - winW) * 0.5;
+      const winY = yTop + (floorH - winH) * 0.5;
+
+      // Window Glass Reflection Gradient
+      const winGrad = ctx.createLinearGradient(winX, winY, winX + winW, winY + winH);
+      winGrad.addColorStop(0, '#1e293b');
+      winGrad.addColorStop(0.35, '#0284c7');
+      winGrad.addColorStop(0.7, '#0369a1');
+      winGrad.addColorStop(1, '#082f49');
+      ctx.fillStyle = winGrad;
+      ctx.fillRect(winX, winY, winW, winH);
+
+      // Window Mullions (Dark Bronze/Charcoal frame)
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(winX, winY, winW, winH);
+
+      // Glass specular reflection highlight
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+      ctx.beginPath();
+      ctx.moveTo(winX, winY);
+      ctx.lineTo(winX + winW * 0.6, winY);
+      ctx.lineTo(winX, winY + winH * 0.6);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Floor-to-floor horizontal spandrel reveal line
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(0, yTop);
+    ctx.lineTo(1024, yTop);
+    ctx.stroke();
+  }
+
+  // Top parapet shadow line
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 5;
+  ctx.strokeRect(0, 0, 1024, 1024);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2, 1);
+  return tex;
+}
+
+/**
+ * Vertical Red/Crimson Curtain Wall Texture
+ * For the central corner tower & left edge vertical window bay
+ */
+function createRedCurtainWallTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 1024;
+  const ctx = c.getContext('2d');
+
+  // Dark crimson/wine structural background
+  ctx.fillStyle = '#450a0a';
+  ctx.fillRect(0, 0, 512, 1024);
+
+  const cols = 4;
   const rows = 12;
-  const cw = 1024 / cols;
+  const cw = 512 / cols;
   const ch = 1024 / rows;
   const pad = 6;
 
@@ -48,114 +159,28 @@ function createCurtainWallTexture() {
       const bw = cw - pad * 2;
       const bh = ch - pad * 2;
 
-      // Realistic architectural glass reflection gradient
+      // Reflective blue/teal glass
       const g = ctx.createLinearGradient(x, y, x + bw, y + bh);
-      const rand = Math.sin(col * 31 + r * 17);
-      if (rand > 0.3) {
-        // Daytime sky reflection
-        g.addColorStop(0, '#60a5fa');
-        g.addColorStop(0.45, '#2563eb');
-        g.addColorStop(1, '#1e3a8a');
-      } else if (rand > -0.2) {
-        // Deep blue tint
-        g.addColorStop(0, '#38bdf8');
-        g.addColorStop(0.5, '#0284c7');
-        g.addColorStop(1, '#0c4a6e');
-      } else {
-        // Warm office interior glow visible through glass
-        g.addColorStop(0, '#fef08a');
-        g.addColorStop(0.7, '#d97706');
-        g.addColorStop(1, '#451a03');
-      }
-
+      g.addColorStop(0, '#38bdf8');
+      g.addColorStop(0.4, '#0284c7');
+      g.addColorStop(1, '#0c4a6e');
       ctx.fillStyle = g;
       ctx.fillRect(x, y, bw, bh);
 
-      // Dark aluminum frame mullion
-      ctx.strokeStyle = '#334155';
+      // Vibrant Red/Crimson Mullion Frames matching Image 2
+      ctx.strokeStyle = '#b91c1c';
       ctx.lineWidth = pad;
       ctx.strokeRect(x, y, bw, bh);
 
-      // Diagonal sun specular glint
+      // Glass glint
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
       ctx.beginPath();
-      ctx.moveTo(x + 2, y + 2);
-      ctx.lineTo(x + bw * 0.45, y + 2);
-      ctx.lineTo(x + 2, y + bh * 0.45);
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + bw * 0.5, y);
+      ctx.lineTo(x, y + bh * 0.5);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
       ctx.fill();
     }
-  }
-
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(2, 2);
-  return tex;
-}
-
-/** White Architectural Rainscreen Panels */
-function createWallPanelTexture() {
-  const c = document.createElement('canvas');
-  c.width = 512;
-  c.height = 512;
-  const ctx = c.getContext('2d');
-
-  ctx.fillStyle = '#f8fafc';
-  ctx.fillRect(0, 0, 512, 512);
-
-  // Panel seams
-  ctx.strokeStyle = '#cbd5e1';
-  ctx.lineWidth = 2.5;
-  for (let y = 0; y <= 512; y += 64) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(512, y); ctx.stroke();
-  }
-  for (let row = 0; row * 64 <= 512; row++) {
-    const offset = (row % 2) * 64;
-    for (let x = offset; x <= 512; x += 128) {
-      ctx.beginPath(); ctx.moveTo(x, row * 64); ctx.lineTo(x, (row + 1) * 64); ctx.stroke();
-    }
-  }
-
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(4, 4);
-  return tex;
-}
-
-/** Realistic Asphalt Roadway with Painted Markings */
-function createAsphaltTexture() {
-  const c = document.createElement('canvas');
-  c.width = 1024;
-  c.height = 1024;
-  const ctx = c.getContext('2d');
-
-  // Dark charcoal asphalt
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(0, 0, 1024, 1024);
-
-  // Fine aggregate noise
-  for (let i = 0; i < 15000; i++) {
-    const val = 20 + Math.random() * 25;
-    ctx.fillStyle = `rgba(${val}, ${val + 5}, ${val + 10}, 0.15)`;
-    ctx.fillRect(Math.random() * 1024, Math.random() * 1024, 2, 2);
-  }
-
-  // Painted parking stall lines (white)
-  ctx.strokeStyle = '#f8fafc';
-  ctx.lineWidth = 6;
-
-  // Yellow center double divider line
-  ctx.strokeStyle = '#facc15';
-  ctx.lineWidth = 8;
-  ctx.beginPath(); ctx.moveTo(508, 0); ctx.lineTo(508, 1024); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(524, 0); ctx.lineTo(524, 1024); ctx.stroke();
-
-  // White zebra pedestrian crossing in front of entrance
-  ctx.fillStyle = '#ffffff';
-  for (let y = 440; y < 580; y += 24) {
-    ctx.fillRect(200, y, 624, 14);
   }
 
   const tex = new THREE.CanvasTexture(c);
@@ -165,285 +190,249 @@ function createAsphaltTexture() {
   return tex;
 }
 
-/** Grass Landscaping Texture */
-function createGrassTexture() {
+/** Lush Lawn Grass Texture */
+function createLawnTexture() {
   const c = document.createElement('canvas');
   c.width = 512;
   c.height = 512;
   const ctx = c.getContext('2d');
 
   const g = ctx.createLinearGradient(0, 0, 0, 512);
-  g.addColorStop(0, '#15803d');
-  g.addColorStop(1, '#166534');
+  g.addColorStop(0, '#4ade80');
+  g.addColorStop(0.5, '#22c55e');
+  g.addColorStop(1, '#15803d');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 512, 512);
 
-  // Micro blade noise
-  for (let i = 0; i < 8000; i++) {
-    const gv = 50 + Math.random() * 60;
-    ctx.fillStyle = `rgba(${gv * 0.4}, ${gv}, ${gv * 0.3}, 0.25)`;
+  // Micro-texture blade flecks
+  for (let i = 0; i < 12000; i++) {
+    const val = 140 + Math.random() * 80;
+    ctx.fillStyle = `rgba(${val * 0.3}, ${val}, ${val * 0.25}, 0.2)`;
     ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 4);
   }
 
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(12, 12);
+  tex.repeat.set(16, 16);
   return tex;
 }
 
-/** Rooftop Helipad Texture */
-function createHelipadTexture() {
+/** Paved Stone Pathway Texture */
+function createStonePathTexture() {
   const c = document.createElement('canvas');
   c.width = 512;
   c.height = 512;
   const ctx = c.getContext('2d');
 
-  ctx.fillStyle = '#0f172a';
+  ctx.fillStyle = '#e2e8f0';
   ctx.fillRect(0, 0, 512, 512);
 
-  // Outer safety circle
-  ctx.strokeStyle = '#facc15';
-  ctx.lineWidth = 14;
-  ctx.beginPath();
-  ctx.arc(256, 256, 210, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // White 'H'
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 220px "Segoe UI", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('H', 256, 266);
-
-  // Red perimeter warning lights
-  for (let i = 0; i < 12; i++) {
-    const angle = (i * Math.PI * 2) / 12;
-    ctx.fillStyle = '#ef4444';
-    ctx.beginPath();
-    ctx.arc(256 + Math.cos(angle) * 230, 256 + Math.sin(angle) * 230, 8, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  return new THREE.CanvasTexture(c);
-}
-
-/** Flush Architectural Signboard Plaque (No billboarding clipping) */
-function createFacadePlaque(title, subtitle, w, h, bgHex = '#091528', textHex = '#38bdf8') {
-  const c = document.createElement('canvas');
-  c.width = 1024;
-  c.height = 256;
-  const ctx = c.getContext('2d');
-
-  ctx.fillStyle = bgHex;
-  ctx.beginPath();
-  ctx.roundRect(8, 8, 1008, 240, 16);
-  ctx.fill();
-
-  ctx.strokeStyle = textHex;
-  ctx.lineWidth = 6;
-  ctx.stroke();
-
-  ctx.textAlign = 'center';
-  const maxLen = 940;
-  let fontSize = 52;
-  ctx.font = `bold ${fontSize}px "Segoe UI", "Rajdhani", sans-serif`;
-  while (ctx.measureText(title).width > maxLen && fontSize > 24) {
-    fontSize -= 2;
-    ctx.font = `bold ${fontSize}px "Segoe UI", "Rajdhani", sans-serif`;
-  }
-  ctx.fillStyle = textHex;
-  ctx.fillText(title, 512, 108);
-
-  if (subtitle) {
-    let subFontSize = 28;
-    ctx.font = `600 ${subFontSize}px "Segoe UI", sans-serif`;
-    while (ctx.measureText(subtitle).width > maxLen && subFontSize > 16) {
-      subFontSize -= 2;
-      ctx.font = `600 ${subFontSize}px "Segoe UI", sans-serif`;
+  // Paver stones pattern
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 2;
+  for (let y = 0; y < 512; y += 32) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(512, y); ctx.stroke();
+    for (let x = 0; x < 512; x += 48) {
+      const off = (Math.floor(y / 32) % 2) * 24;
+      ctx.beginPath(); ctx.moveTo(x + off, y); ctx.lineTo(x + off, y + 32); ctx.stroke();
     }
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillText(subtitle, 512, 185);
   }
 
   const tex = new THREE.CanvasTexture(c);
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-  return mesh;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(6, 6);
+  return tex;
+}
+
+/** Water Texture for Circular Pond */
+function createWaterTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 512;
+  const ctx = c.getContext('2d');
+
+  const g = ctx.createRadialGradient(256, 256, 20, 256, 256, 256);
+  g.addColorStop(0, '#2dd4bf');
+  g.addColorStop(0.5, '#0d9488');
+  g.addColorStop(1, '#115e59');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Concentric ripple rings
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+  ctx.lineWidth = 3;
+  for (let r = 30; r < 240; r += 28) {
+    ctx.beginPath();
+    ctx.arc(256, 256, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  return tex;
 }
 
 // ══════════════════════════════════════════════════════════════════════
-//  DETAILED PROCEDURAL VEHICLES & PROPS
+//  DETAILED 3D PROPS MATCHING IMAGE: AMBULANCE, TREES, FLOWER HEDGES
 // ══════════════════════════════════════════════════════════════════════
 
-/** Realistic Modern Ambulance */
-function createAmbulance(x, z, rotationY) {
+/**
+ * Modern Emergency Ambulance matching reference vehicles
+ */
+function createAmbulance(x, z, rotY) {
   const g = new THREE.Group();
   g.position.set(x, 0, z);
-  g.rotation.y = rotationY;
+  g.rotation.y = rotY;
 
-  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.2 });
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25 });
   const redMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.3 });
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.1, metalness: 0.9 });
-  const tireMat = new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.8 });
+  const darkGlassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.1, metalness: 0.8 });
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
 
-  // Main chassis
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.8, 5.2), whiteMat);
+  // Main Patient Compartment Box
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.8, 4.6), whiteMat);
   body.position.y = 1.3;
   body.castShadow = true;
   g.add(body);
 
-  // Cab hood
-  const hood = new THREE.Mesh(new THREE.BoxGeometry(2.35, 1.0, 1.4), whiteMat);
-  hood.position.set(0, 0.9, 2.7);
-  hood.castShadow = true;
-  g.add(hood);
-
-  // Windshield
-  const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.75, 0.1), glassMat);
-  windshield.position.set(0, 1.6, 2.0);
-  windshield.rotation.x = -0.3;
-  g.add(windshield);
-
-  // Red emergency stripes
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.42, 0.35, 5.2), redMat);
-  stripe.position.y = 1.25;
+  // Red Side Stripe
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.34, 0.35, 4.5), redMat);
+  stripe.position.set(0, 1.3, 0);
   g.add(stripe);
 
+  // Red Cross Decals on both sides
+  [-1.18, 1.18].forEach((xSide) => {
+    const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6, 0.2), redMat);
+    crossV.position.set(xSide, 1.35, 0);
+    g.add(crossV);
+
+    const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.2, 0.6), redMat);
+    crossH.position.set(xSide, 1.35, 0);
+    g.add(crossH);
+  });
+
+  // Front Driver Cab
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.3, 1.6), whiteMat);
+  cab.position.set(0, 1.05, 2.7);
+  cab.castShadow = true;
+  g.add(cab);
+
+  // Windshield
+  const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.65, 0.1), darkGlassMat);
+  windshield.position.set(0, 1.45, 3.48);
+  windshield.rotation.x = -0.25;
+  g.add(windshield);
+
+  // Cab Side Windows
+  const cabWinL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.45, 0.8), darkGlassMat);
+  cabWinL.position.set(-1.08, 1.3, 2.7);
+  g.add(cabWinL);
+
+  const cabWinR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.45, 0.8), darkGlassMat);
+  cabWinR.position.set(1.08, 1.3, 2.7);
+  g.add(cabWinR);
+
+  // Roof Emergency Light Bar (Red & Blue)
+  const lightBar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.18, 0.35), redMat);
+  lightBar.position.set(0, 2.3, 1.8);
+  g.add(lightBar);
+
+  const blueLight = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 0.2, 0.36),
+    new THREE.MeshStandardMaterial({ color: 0x0284c7, emissive: 0x0284c7, emissiveIntensity: 0.6 })
+  );
+  blueLight.position.set(0.5, 2.3, 1.8);
+  g.add(blueLight);
+
   // 4 Wheels
-  [[-1.2, 1.6], [1.2, 1.6], [-1.2, -1.6], [1.2, -1.6]].forEach(([wx, wz]) => {
-    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.32, 16), tireMat);
-    wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(wx, 0.42, wz);
+  const wheelGeom = new THREE.CylinderGeometry(0.42, 0.42, 0.32, 16);
+  wheelGeom.rotateZ(Math.PI / 2);
+
+  [[-1.1, 0.42, 1.5], [1.1, 0.42, 1.5], [-1.1, 0.42, -1.5], [1.1, 0.42, -1.5]].forEach(([wx, wy, wz]) => {
+    const wheel = new THREE.Mesh(wheelGeom, wheelMat);
+    wheel.position.set(wx, wy, wz);
     wheel.castShadow = true;
     g.add(wheel);
   });
 
-  // Flashing Rooftop Lightbar
-  const barMat = new THREE.MeshStandardMaterial({ color: 0x0f172a });
-  const lightBar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.15, 0.4), barMat);
-  lightBar.position.set(0, 2.3, 1.8);
-  g.add(lightBar);
-
-  const redBeacon = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.2, 0.35), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
-  redBeacon.position.set(-0.5, 2.45, 1.8);
-  g.add(redBeacon);
-
-  const blueBeacon = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.2, 0.35), new THREE.MeshBasicMaterial({ color: 0x3b82f6 }));
-  blueBeacon.position.set(0.5, 2.45, 1.8);
-  g.add(blueBeacon);
-
-  const sirenLightRed = new THREE.PointLight(0xef4444, 2.0, 10);
-  sirenLightRed.position.set(-0.5, 2.8, 1.8);
-  g.add(sirenLightRed);
-
-  const sirenLightBlue = new THREE.PointLight(0x3b82f6, 2.0, 10);
-  sirenLightBlue.position.set(0.5, 2.8, 1.8);
-  g.add(sirenLightBlue);
-
-  g.userData = { sirenLightRed, sirenLightBlue };
   return g;
 }
 
-/** Modern Car / SUV */
-function createCar(x, z, rotationY, colorHex = 0x0284c7) {
-  const g = new THREE.Group();
-  g.position.set(x, 0, z);
-  g.rotation.y = rotationY;
-
-  const paintMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.2, metalness: 0.4 });
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.1, metalness: 0.95 });
-  const tireMat = new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.8 });
-
-  // Lower chassis
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.7, 4.4), paintMat);
-  body.position.y = 0.65;
-  body.castShadow = true;
-  g.add(body);
-
-  // Cabin
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.65, 2.4), paintMat);
-  cabin.position.set(0, 1.25, -0.2);
-  cabin.castShadow = true;
-  g.add(cabin);
-
-  // Windows
-  const frontWin = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.55, 0.08), glassMat);
-  frontWin.position.set(0, 1.25, 0.95);
-  frontWin.rotation.x = -0.35;
-  g.add(frontWin);
-
-  const backWin = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.55, 0.08), glassMat);
-  backWin.position.set(0, 1.25, -1.35);
-  backWin.rotation.x = 0.35;
-  g.add(backWin);
-
-  // Wheels
-  [[-1.05, 1.3], [1.05, 1.3], [-1.05, -1.3], [1.05, -1.3]].forEach(([wx, wz]) => {
-    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.25, 16), tireMat);
-    w.rotation.z = Math.PI / 2;
-    w.position.set(wx, 0.35, wz);
-    w.castShadow = true;
-    g.add(w);
-  });
-
-  return g;
-}
-
-/** Realistic Layered Tree */
-function createTree(x, z, scale = 1.0) {
+/**
+ * Organic Deciduous Canopy Tree matching reference image
+ */
+function createHospitalTree(x, z, scale = 1.0) {
   const g = new THREE.Group();
   g.position.set(x, 0, z);
 
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x452a16, roughness: 0.9 });
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2 * scale, 0.35 * scale, 3.2 * scale, 12), trunkMat);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c3d2e, roughness: 0.9 });
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25 * scale, 0.45 * scale, 3.2 * scale, 8), trunkMat);
   trunk.position.y = 1.6 * scale;
   trunk.castShadow = true;
   g.add(trunk);
 
-  const leafMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.6 });
-  const leafMatDark = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.7 });
+  // Leaf Clusters
+  const leafMatA = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.7 });
+  const leafMatB = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.75 });
+  const leafMatC = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.65 });
 
-  [[0, 3.2, 0, 1.8], [0.3, 4.2, 0.2, 1.5], [-0.2, 5.0, -0.1, 1.2], [0.1, 5.7, 0.1, 0.8]].forEach(([ox, oy, oz, r], i) => {
-    const leaf = new THREE.Mesh(new THREE.DodecahedronGeometry(r * scale, 1), i % 2 === 0 ? leafMat : leafMatDark);
-    leaf.position.set(ox * scale, oy * scale, oz * scale);
-    leaf.castShadow = true;
-    g.add(leaf);
+  const clusters = [
+    [0, 3.4 * scale, 0, 1.8 * scale, leafMatA],
+    [0.7 * scale, 4.0 * scale, 0.4 * scale, 1.4 * scale, leafMatB],
+    [-0.6 * scale, 4.2 * scale, -0.3 * scale, 1.3 * scale, leafMatC],
+    [0.2 * scale, 5.0 * scale, -0.2 * scale, 1.1 * scale, leafMatA],
+    [-0.3 * scale, 3.6 * scale, 0.6 * scale, 1.2 * scale, leafMatB],
+  ];
+
+  clusters.forEach(([cx, cy, cz, cr, mat]) => {
+    const cluster = new THREE.Mesh(new THREE.DodecahedronGeometry(cr, 1), mat);
+    cluster.position.set(cx, cy, cz);
+    cluster.castShadow = true;
+    g.add(cluster);
   });
 
   return g;
 }
 
-/** Modern Architectural Streetlight */
-function createStreetlight(x, z, rotationY) {
+/**
+ * Vibrant Flowering Purple/Magenta Bush matching the hedges in Image 2
+ */
+function createFloweringBush(x, z, radius = 0.9) {
   const g = new THREE.Group();
   g.position.set(x, 0, z);
-  g.rotation.y = rotationY;
 
-  const poleMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.9, roughness: 0.2 });
+  // Mixture of purple/magenta bougainvillea blooms and green leaves
+  const bloomMat = new THREE.MeshStandardMaterial({
+    color: Math.random() > 0.4 ? 0xa21caf : 0xc026d3,
+    roughness: 0.65,
+  });
 
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 6.5, 12), poleMat);
-  pole.position.y = 3.25;
-  pole.castShadow = true;
-  g.add(pole);
+  const greenMat = new THREE.MeshStandardMaterial({
+    color: 0x15803d,
+    roughness: 0.75,
+  });
 
-  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.4), poleMat);
-  arm.position.set(0, 6.45, 0.6);
-  g.add(arm);
+  const base = new THREE.Mesh(new THREE.SphereGeometry(radius, 8, 6), greenMat);
+  base.position.y = radius * 0.75;
+  base.scale.set(1.1, 0.8, 1.1);
+  base.castShadow = true;
+  g.add(base);
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.1, 0.6), poleMat);
-  head.position.set(0, 6.45, 1.2);
-  g.add(head);
-
-  const light = new THREE.PointLight(0xfffbeb, 1.8, 18);
-  light.position.set(0, 6.1, 1.2);
-  g.add(light);
+  for (let i = 0; i < 4; i++) {
+    const angle = (i * Math.PI) / 2 + Math.random() * 0.4;
+    const r = radius * 0.55;
+    const bloom = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), bloomMat);
+    bloom.position.set(Math.cos(angle) * radius * 0.6, radius * 0.9 + Math.random() * 0.2, Math.sin(angle) * radius * 0.6);
+    bloom.castShadow = true;
+    g.add(bloom);
+  }
 
   return g;
 }
 
 // ══════════════════════════════════════════════════════════════════════
-//  MAIN COMPONENT: HOSPITAL EXTERIOR 3D (LEVEL 1)
+//  MAIN COMPONENT: HOSPITAL EXTERIOR 3D (MATCHING REFERENCE IMAGE)
 // ══════════════════════════════════════════════════════════════════════
 
 export default function HospitalExterior3D({ rooms, onEnterFloor }) {
@@ -451,438 +440,529 @@ export default function HospitalExterior3D({ rooms, onEnterFloor }) {
   const animFrameRef = useRef(null);
   const onEnterFloorRef = useRef(onEnterFloor);
   const isTransitioningRef = useRef(false);
-  const raycasterRef = useRef(new THREE.Raycaster());
-  const mouseRef = useRef(new THREE.Vector2());
+  const cameraRef = useRef(null);
+  const controlsRef = useRef(null);
 
-  // Ref for ambulance siren animation
-  const ambulanceRef = useRef(null);
-  const icuGlowRef = useRef(null);
+  const [hoveredHotspot, setHoveredHotspot] = useState(null);
 
   useEffect(() => {
     onEnterFloorRef.current = onEnterFloor;
   }, [onEnterFloor]);
 
+  // Click handler to enter reception
+  const handleEnterHospital = () => {
+    if (isTransitioningRef.current) return;
+    isTransitioningRef.current = true;
+
+    // Smooth camera swoop into entrance lobby
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (camera && controls) {
+      const targetPos = new THREE.Vector3(-1.0, 3.2, 9.0);
+      const targetLook = new THREE.Vector3(-1.0, 3.2, 0);
+
+      const startTime = performance.now();
+      const startPos = camera.position.clone();
+      const startLook = controls.target.clone();
+
+      const swoop = (now) => {
+        const progress = Math.min(1.0, (now - startTime) / 1100);
+        const ease = 0.5 - Math.cos(progress * Math.PI) / 2;
+
+        camera.position.lerpVectors(startPos, targetPos, ease);
+        controls.target.lerpVectors(startLook, targetLook, ease);
+        controls.update();
+
+        if (progress < 1.0) {
+          requestAnimationFrame(swoop);
+        } else {
+          if (onEnterFloorRef.current) onEnterFloorRef.current();
+        }
+      };
+      requestAnimationFrame(swoop);
+    } else {
+      if (onEnterFloorRef.current) onEnterFloorRef.current();
+    }
+  };
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    // ── 1. Scene Setup ────────────────────────────────────────────
+    // ── 1. Scene Setup ──────────────────────────────────────────
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0xcde9f6, 0.0035);
+    scene.fog = new THREE.FogExp2(0xdbeafe, 0.0032);
 
     // Sky Dome
     const skyTex = createSkyTexture();
     const sky = new THREE.Mesh(
-      new THREE.SphereGeometry(350, 32, 16),
+      new THREE.SphereGeometry(380, 32, 16),
       new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide })
     );
     scene.add(sky);
 
-    // ── 2. Camera Setup ───────────────────────────────────────────
-    const camera = new THREE.PerspectiveCamera(46, container.clientWidth / container.clientHeight, 0.1, 500);
-    const defaultCamPos = new THREE.Vector3(38, 24, 52);
-    const defaultTarget = new THREE.Vector3(0, 8, 0);
+    // ── 2. Camera Setup (Elevated 3/4 Perspective Matching Image 2)
+    const camera = new THREE.PerspectiveCamera(44, container.clientWidth / container.clientHeight, 0.2, 600);
+    // Exact viewpoint from Image 2: high angle, capturing the L-shaped bend, canopy, and pond lawn
+    const defaultCamPos = new THREE.Vector3(26, 40, 64);
+    const defaultTarget = new THREE.Vector3(8, 6, 2);
     camera.position.copy(defaultCamPos);
     camera.lookAt(defaultTarget);
+    cameraRef.current = camera;
 
-    // ── 3. WebGL Renderer ─────────────────────────────────────────
+    // ── 3. WebGL Renderer ───────────────────────────────────────
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.toneMappingExposure = 1.25;
     container.appendChild(renderer.domElement);
 
-    // ── 4. OrbitControls ──────────────────────────────────────────
+    // ── 4. OrbitControls ────────────────────────────────────────
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.minDistance = 16;
-    controls.maxDistance = 90;
-    controls.maxPolarAngle = Math.PI / 2.3;
+    controls.minDistance = 14;
+    controls.maxDistance = 110;
+    controls.maxPolarAngle = Math.PI / 2.25;
     controls.minPolarAngle = 0.15;
     controls.target.copy(defaultTarget);
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 0.25;
+    controlsRef.current = controls;
 
-    // ── 5. Daylight & Architectural Sun Lighting ──────────────────
-    scene.add(new THREE.AmbientLight(0xdbeafe, 0.75));
+    // ── 5. Daylight & Architectural Lighting Matching Reference ──
+    scene.add(new THREE.AmbientLight(0xdbeafe, 0.9));
 
-    const sun = new THREE.DirectionalLight(0xfffaed, 2.4);
-    sun.position.set(65, 95, 50);
+    // Sun positioned to cast realistic shadows toward the lower right
+    const sun = new THREE.DirectionalLight(0xfffaed, 2.5);
+    sun.position.set(55, 85, 42);
     sun.castShadow = true;
     sun.shadow.mapSize.width = 2048;
     sun.shadow.mapSize.height = 2048;
     sun.shadow.camera.near = 5;
-    sun.shadow.camera.far = 250;
-    sun.shadow.camera.left = -70;
-    sun.shadow.camera.right = 70;
-    sun.shadow.camera.top = 70;
-    sun.shadow.camera.bottom = -70;
-    sun.shadow.bias = -0.0002;
+    sun.shadow.camera.far = 280;
+    sun.shadow.camera.left = -80;
+    sun.shadow.camera.right = 80;
+    sun.shadow.camera.top = 80;
+    sun.shadow.camera.bottom = -80;
+    sun.shadow.bias = -0.0003;
     scene.add(sun);
 
-    const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.6);
-    fillLight.position.set(-50, 30, -40);
+    const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.7);
+    fillLight.position.set(-60, 40, -40);
     scene.add(fillLight);
 
     const campusGroup = new THREE.Group();
     scene.add(campusGroup);
 
-    // ── 6. CAMPUS GROUND & ROADWAY ────────────────────────────────
+    // ══════════════════════════════════════════════════════════════
+    //  6. GROUNDS, LAWN, ROADS, CIRCULAR POND & PATHWAYS
+    // ══════════════════════════════════════════════════════════════
 
-    // Surrounding Green Grass
-    const grassTex = createGrassTexture();
-    const grassMat = new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.8 });
-    const grass = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), grassMat);
-    grass.rotation.x = -Math.PI / 2;
-    grass.receiveShadow = true;
-    campusGroup.add(grass);
+    // Expansive Green Lawn
+    const lawnTex = createLawnTexture();
+    const lawnMat = new THREE.MeshStandardMaterial({ map: lawnTex, roughness: 0.85 });
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(320, 320), lawnMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    campusGroup.add(ground);
 
-    // Main Drop-Off Roadway & Parking Courtyard
-    const roadTex = createAsphaltTexture();
-    const roadMat = new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.65 });
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(85, 45), roadMat);
-    road.rotation.x = -Math.PI / 2;
-    road.position.set(0, 0.03, 26);
-    road.receiveShadow = true;
-    campusGroup.add(road);
+    // Dark Asphalt Drop-off Roadway
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.65 });
 
-    // Concrete Curbs
-    const curbMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.4 });
-    const curbL = new THREE.Mesh(new THREE.BoxGeometry(85, 0.25, 0.5), curbMat);
-    curbL.position.set(0, 0.12, 3.5);
-    campusGroup.add(curbL);
+    // Main curved driveway loop in front of canopy
+    const roadLoop = new THREE.Mesh(new THREE.PlaneGeometry(100, 36), roadMat);
+    roadLoop.rotation.x = -Math.PI / 2;
+    roadLoop.position.set(10, 0.03, 14);
+    roadLoop.receiveShadow = true;
+    campusGroup.add(roadLoop);
 
-    const curbR = new THREE.Mesh(new THREE.BoxGeometry(85, 0.25, 0.5), curbMat);
-    curbR.position.set(0, 0.12, 48.5);
-    campusGroup.add(curbR);
+    // Right curved driveway loop sweeping to the foreground
+    const roadRight = new THREE.Mesh(new THREE.PlaneGeometry(28, 55), roadMat);
+    roadRight.rotation.x = -Math.PI / 2;
+    roadRight.rotation.z = -0.42;
+    roadRight.position.set(38, 0.035, 30);
+    roadRight.receiveShadow = true;
+    campusGroup.add(roadRight);
 
-    // ── 7. MAIN HOSPITAL BUILDINGS ────────────────────────────────
-    const wallTex = createWallPanelTexture();
-    const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.35 });
+    // Left access driveway sweeping out
+    const roadLeft = new THREE.Mesh(new THREE.PlaneGeometry(20, 60), roadMat);
+    roadLeft.rotation.x = -Math.PI / 2;
+    roadLeft.rotation.z = 0.55;
+    roadLeft.position.set(-36, 0.035, 12);
+    roadLeft.receiveShadow = true;
+    campusGroup.add(roadLeft);
 
-    const glassTex = createCurtainWallTexture();
-    const glassFacadeMat = new THREE.MeshStandardMaterial({
-      map: glassTex,
-      roughness: 0.05,
-      metalness: 0.9,
+    // Concrete curbs framing the driveway
+    const curbMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.5 });
+    const curbBack = new THREE.Mesh(new THREE.BoxGeometry(98, 0.25, 0.6), curbMat);
+    curbBack.position.set(10, 0.12, -3.8);
+    campusGroup.add(curbBack);
+
+    // Circular Pond / Water Feature on Front-Left Lawn (Exact match to Image 2!)
+    const pondCenter = new THREE.Vector3(-14, 0.06, 38);
+    const pondRadius = 8.5;
+
+    // Teal water disc
+    const waterTex = createWaterTexture();
+    const waterMat = new THREE.MeshStandardMaterial({
+      map: waterTex,
+      roughness: 0.1,
+      metalness: 0.35,
+      color: 0x0d9488,
+    });
+    const pondWater = new THREE.Mesh(new THREE.CircleGeometry(pondRadius, 36), waterMat);
+    pondWater.rotation.x = -Math.PI / 2;
+    pondWater.position.copy(pondCenter);
+    campusGroup.add(pondWater);
+
+    // Stone Coping Ring surrounding the pond
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.6 });
+    const ringGeom = new THREE.RingGeometry(pondRadius - 0.2, pondRadius + 1.2, 36);
+    const pondRing = new THREE.Mesh(ringGeom, ringMat);
+    pondRing.rotation.x = -Math.PI / 2;
+    pondRing.position.set(pondCenter.x, 0.07, pondCenter.z);
+    campusGroup.add(pondRing);
+
+    // Curving Pedestrian Stone Pathways around pond and linking to driveway
+    const pathTex = createStonePathTexture();
+    const pathMat = new THREE.MeshStandardMaterial({ map: pathTex, roughness: 0.6 });
+
+    const path1 = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 36), pathMat);
+    path1.rotation.x = -Math.PI / 2;
+    path1.rotation.z = 0.35;
+    path1.position.set(-8, 0.05, 24);
+    campusGroup.add(path1);
+
+    const path2 = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 28), pathMat);
+    path2.rotation.x = -Math.PI / 2;
+    path2.rotation.z = -0.55;
+    path2.position.set(-22, 0.05, 34);
+    campusGroup.add(path2);
+
+    // ══════════════════════════════════════════════════════════════
+    //  7. HOSPITAL BUILDING ARCHITECTURE MATCHING IMAGE 2
+    // ══════════════════════════════════════════════════════════════
+    // The building is an angled chevron / obtuse-angled structure (~130°)
+    // with 4 distinct floors, vertical faceted chevron pleat panels,
+    // and vertical crimson/red curtain-wall feature bays.
+
+    const chevronTex = createChevronFacadeTexture();
+    const chevronMat = new THREE.MeshStandardMaterial({
+      map: chevronTex,
+      roughness: 0.45,
+      metalness: 0.15,
     });
 
-    const spandrelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.8, roughness: 0.2 });
-
-    // Main Center Tower (8 Floors)
-    const towerH = 34;
-    const towerW = 34;
-    const towerD = 22;
-    const tower = new THREE.Mesh(new THREE.BoxGeometry(towerW, towerH, towerD), wallMat);
-    tower.position.set(0, towerH / 2, -10);
-    tower.castShadow = true;
-    tower.receiveShadow = true;
-    campusGroup.add(tower);
-
-    // Tower Front Curtain Wall (Floor 1 to 8)
-    const towerCW = new THREE.Mesh(new THREE.PlaneGeometry(towerW - 4, towerH - 4), glassFacadeMat);
-    towerCW.position.set(0, towerH / 2, 1.05);
-    campusGroup.add(towerCW);
-
-    // Rooftop Mechanical Penthouse
-    const pent = new THREE.Mesh(new THREE.BoxGeometry(14, 4.5, 12), spandrelMat);
-    pent.position.set(5, towerH + 2.25, -10);
-    pent.castShadow = true;
-    campusGroup.add(pent);
-
-    // Rooftop Helipad
-    const helipadTex = createHelipadTexture();
-    const helipadMat = new THREE.MeshStandardMaterial({ map: helipadTex, roughness: 0.5 });
-    const helipad = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), helipadMat);
-    helipad.rotation.x = -Math.PI / 2;
-    helipad.position.set(-6, towerH + 0.1, -10);
-    campusGroup.add(helipad);
-
-    // Rooftop Antenna Tower with red beacon light
-    const antennaMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9 });
-    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.2, 8.0, 8), antennaMat);
-    antenna.position.set(10, towerH + 8.5, -6);
-    campusGroup.add(antenna);
-
-    const beaconLight = new THREE.PointLight(0xef4444, 2.5, 12);
-    beaconLight.position.set(10, towerH + 12.5, -6);
-    campusGroup.add(beaconLight);
-
-    // West Wing (4 Floors, Patient Wards)
-    const westWing = new THREE.Mesh(new THREE.BoxGeometry(18, 16, 20), wallMat);
-    westWing.position.set(-23, 8, -6);
-    westWing.castShadow = true;
-    westWing.receiveShadow = true;
-    campusGroup.add(westWing);
-
-    const westCW = new THREE.Mesh(new THREE.PlaneGeometry(16, 13), glassFacadeMat);
-    westCW.position.set(-23, 8, 4.05);
-    campusGroup.add(westCW);
-
-    // East Wing (Emergency & Trauma Centre, 3 Floors)
-    const erWing = new THREE.Mesh(new THREE.BoxGeometry(20, 12, 18), wallMat);
-    erWing.position.set(23, 6, -5);
-    erWing.castShadow = true;
-    erWing.receiveShadow = true;
-    campusGroup.add(erWing);
-
-    // Emergency Flush Facade Plaque & Red Canopy
-    const erPlaque = createFacadePlaque('EMERGENCY / TRAUMA', 'AMBULANCE BAY • 24/7 ENTRANCE', 12, 1.8, '#1e0505', '#ef4444');
-    erPlaque.position.set(23, 10.5, 4.05);
-    campusGroup.add(erPlaque);
-
-    const erCanopy = new THREE.Mesh(new THREE.BoxGeometry(14, 0.4, 6), spandrelMat);
-    erCanopy.position.set(23, 6.2, 7.0);
-    erCanopy.castShadow = true;
-    campusGroup.add(erCanopy);
-
-    // ── 8. LEVEL 3: ICU AIR QUALITY MONITORING WING HIGHLIGHT ─────
-    // Modern Architectural Glowing LED Reveal Ribbon along Floor 3 (Y = 12.5)
-    const icuRibbonMat = new THREE.MeshBasicMaterial({
-      color: 0x00f0ff,
-      transparent: true,
-      opacity: 0.9,
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.7 });
+    const redCWTex = createRedCurtainWallTexture();
+    const redCWMat = new THREE.MeshStandardMaterial({
+      map: redCWTex,
+      roughness: 0.1,
+      metalness: 0.6,
     });
-    const icuRibbon = new THREE.Mesh(new THREE.BoxGeometry(towerW - 3.8, 0.25, 0.4), icuRibbonMat);
-    icuRibbon.position.set(0, 14.5, 1.15);
-    campusGroup.add(icuRibbon);
 
-    const icuRibbonBot = new THREE.Mesh(new THREE.BoxGeometry(towerW - 3.8, 0.25, 0.4), icuRibbonMat);
-    icuRibbonBot.position.set(0, 10.5, 1.15);
-    campusGroup.add(icuRibbonBot);
+    const buildingH = 18.0; // 4 Floors height (~4.5 units per floor)
+    const buildingY = buildingH * 0.5;
 
-    // Soft architectural cyan wash light across Floor 3
-    const icuWash = new THREE.PointLight(0x00f0ff, 2.2, 16);
-    icuWash.position.set(0, 12.5, 3.5);
-    campusGroup.add(icuWash);
-    icuGlowRef.current = icuWash;
+    // ── LEFT WING (Angled forward-left ~26°) ────────────────────
+    const leftWingGroup = new THREE.Group();
+    // Central junction vertex at (0, 0, 0)
+    leftWingGroup.position.set(0, 0, 0);
+    leftWingGroup.rotation.y = 0.45; // ~26 degrees outward
 
-    // Flush Facade Hospital Frieze Signboard (Above entrance canopy)
-    const mainSign = createFacadePlaque(
-      'METROPOLITAN GENERAL HOSPITAL',
-      'ACADEMIC MEDICAL CENTER • CRITICAL CARE FACILITY',
-      24,
-      3.2,
-      '#051124',
-      '#00f0ff'
+    const leftWingLen = 38.0;
+    const leftWingDepth = 14.0;
+
+    const leftWingMesh = new THREE.Mesh(new THREE.BoxGeometry(leftWingLen, buildingH, leftWingDepth), chevronMat);
+    leftWingMesh.position.set(-leftWingLen * 0.5, buildingY, -leftWingDepth * 0.5);
+    leftWingMesh.castShadow = true;
+    leftWingMesh.receiveShadow = true;
+    leftWingGroup.add(leftWingMesh);
+
+    // Left Wing Parapet Top
+    const leftParapet = new THREE.Mesh(new THREE.BoxGeometry(leftWingLen + 0.4, 0.8, leftWingDepth + 0.4), roofMat);
+    leftParapet.position.set(-leftWingLen * 0.5, buildingH + 0.4, -leftWingDepth * 0.5);
+    leftWingGroup.add(leftParapet);
+
+    // Prominent Vertical Red Curtain Wall on Left End Bay (Image 2!)
+    const leftRedBay = new THREE.Mesh(new THREE.PlaneGeometry(5.2, buildingH - 0.4), redCWMat);
+    leftRedBay.position.set(-leftWingLen + 3.2, buildingY, 0.05);
+    leftWingGroup.add(leftRedBay);
+
+    campusGroup.add(leftWingGroup);
+
+    // ── RIGHT WING (Longer wing extending along +X, angled ~8°) ─
+    const rightWingGroup = new THREE.Group();
+    rightWingGroup.position.set(0, 0, 0);
+    rightWingGroup.rotation.y = -0.14; // ~8 degrees
+
+    const rightWingLen = 60.0; // Longer wing as shown in Image 2
+    const rightWingDepth = 14.0;
+
+    const rightWingMesh = new THREE.Mesh(new THREE.BoxGeometry(rightWingLen, buildingH, rightWingDepth), chevronMat);
+    rightWingMesh.position.set(rightWingLen * 0.5, buildingY, -rightWingDepth * 0.5);
+    rightWingMesh.castShadow = true;
+    rightWingMesh.receiveShadow = true;
+    rightWingGroup.add(rightWingMesh);
+
+    // Right Wing Parapet Top
+    const rightParapet = new THREE.Mesh(new THREE.BoxGeometry(rightWingLen + 0.4, 0.8, rightWingDepth + 0.4), roofMat);
+    rightParapet.position.set(rightWingLen * 0.5, buildingH + 0.4, -rightWingDepth * 0.5);
+    rightWingGroup.add(rightParapet);
+
+    campusGroup.add(rightWingGroup);
+
+    // ── CENTRAL JUNCTION VERTICAL RED CURTAIN WALL (Image 2!) ──
+    // Multi-story vertical dark-red glass curtain wall directly above canopy junction
+    const centerRedBay = new THREE.Mesh(new THREE.PlaneGeometry(6.4, buildingH - 0.2), redCWMat);
+    centerRedBay.position.set(0.2, buildingY, 0.1);
+    centerRedBay.rotation.y = 0.15;
+    campusGroup.add(centerRedBay);
+
+    // Rooftop Mechanical Penthouse (Set back at rear junction)
+    const mechPent = new THREE.Mesh(
+      new THREE.BoxGeometry(16, 4.2, 12),
+      new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.6 })
     );
-    mainSign.position.set(0, 19.5, 1.2);
-    campusGroup.add(mainSign);
+    mechPent.position.set(-2, buildingH + 2.1, -12);
+    mechPent.castShadow = true;
+    campusGroup.add(mechPent);
 
-    // Floor 3 Digital-Twin Identification Plaque (Mounted flush)
-    const icuFloorPlaque = createFacadePlaque(
-      'LEVEL 3: ICU AIR QUALITY DIGITAL TWIN',
-      'REAL-TIME WHO ENVIRONMENTAL MONITORING ARRAY',
-      18,
-      1.8,
-      '#031726',
-      '#38bdf8'
+    // ══════════════════════════════════════════════════════════════
+    //  8. GRAND ENTRANCE PORTE-COCHÈRE CANOPY (Image 2!)
+    // ══════════════════════════════════════════════════════════════
+    const canopyGroup = new THREE.Group();
+    canopyGroup.position.set(0, 0, 0);
+
+    const canopyMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.35 });
+    const canopyH = 4.4;
+
+    // Angled cantilever slab covering entrance drop-off
+    const canopySlab = new THREE.Mesh(new THREE.BoxGeometry(26, 0.6, 16), canopyMat);
+    canopySlab.position.set(2.0, canopyH, 5.0);
+    canopySlab.rotation.y = 0.12;
+    canopySlab.castShadow = true;
+    canopyGroup.add(canopySlab);
+
+    // Under-canopy fascia trim
+    const canopyTrim = new THREE.Mesh(
+      new THREE.BoxGeometry(26.2, 0.25, 16.2),
+      new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.4 })
     );
-    icuFloorPlaque.position.set(0, 12.5, 1.22);
-    campusGroup.add(icuFloorPlaque);
+    canopyTrim.position.set(2.0, canopyH - 0.2, 5.0);
+    canopyTrim.rotation.y = 0.12;
+    canopyGroup.add(canopyTrim);
 
-    // Red Cross Emblem
-    const crossGroup = new THREE.Group();
-    crossGroup.position.set(-13, 26, 1.2);
-    const crossMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
-    crossGroup.add(new THREE.Mesh(new THREE.BoxGeometry(0.6, 2.4, 0.1), crossMat));
-    crossGroup.add(new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.6, 0.1), crossMat));
-    campusGroup.add(crossGroup);
+    // Cylindrical Support Pillars (Image 2!)
+    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.7, roughness: 0.3 });
+    const pillarGeom = new THREE.CylinderGeometry(0.22, 0.22, canopyH, 16);
 
-    // ── 9. MODERN ENTRANCE PAVILION & DROP-OFF CANOPY ─────────────
-    const entranceGroup = new THREE.Group();
-    entranceGroup.position.set(0, 0, 5);
+    const pillarPositions = [
+      [-7.5, 12.0],
+      [-1.5, 12.5],
+      [5.5, 12.5],
+      [12.5, 11.5],
+      [-7.5, 0.5],
+      [12.5, 0.5],
+    ];
 
-    // Cantilevered Architectural Canopy (Dark Composite Panel)
-    const canopyMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.85, roughness: 0.25 });
-    const canopy = new THREE.Mesh(new THREE.BoxGeometry(26, 0.6, 10), canopyMat);
-    canopy.position.set(0, 5.8, 8);
-    canopy.castShadow = true;
-    entranceGroup.add(canopy);
-
-    // Warm Under-Canopy Recessed Lighting
-    const canopyLight = new THREE.PointLight(0xffedd5, 3.0, 20);
-    canopyLight.position.set(0, 4.8, 8);
-    entranceGroup.add(canopyLight);
-
-    // 4 Brushed Steel Columns
-    const colMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.95, roughness: 0.15 });
-    [[-11, 12], [-4, 12], [4, 12], [11, 12]].forEach(([cx, cz]) => {
-      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 5.8, 16), colMat);
-      col.position.set(cx, 2.9, cz);
-      col.castShadow = true;
-      entranceGroup.add(col);
+    pillarPositions.forEach(([px, pz]) => {
+      const pillar = new THREE.Mesh(pillarGeom, pillarMat);
+      pillar.position.set(px, canopyH * 0.5, pz);
+      pillar.castShadow = true;
+      canopyGroup.add(pillar);
     });
 
-    // Glass Entrance Vestibule (Clear architectural glass with warm interior glow)
-    const entryGlassMat = new THREE.MeshStandardMaterial({
-      color: 0x38bdf8,
+    // Raised Entrance Podium & Steps under canopy
+    const stepsMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.5 });
+    const steps = new THREE.Mesh(new THREE.BoxGeometry(16, 0.5, 6), stepsMat);
+    steps.position.set(1.0, 0.25, 1.5);
+    steps.receiveShadow = true;
+    canopyGroup.add(steps);
+
+    // Warmly Illuminated Glass Entrance Lobby Doors
+    const glassEntrance = new THREE.Mesh(
+      new THREE.PlaneGeometry(12, 3.8),
+      new THREE.MeshStandardMaterial({
+        color: 0x0284c7,
+        emissive: 0xfffbeb,
+        emissiveIntensity: 0.35,
+        roughness: 0.1,
+      })
+    );
+    glassEntrance.position.set(1.0, 2.0, 0.15);
+    canopyGroup.add(glassEntrance);
+
+    // Under-canopy warm ambient illumination
+    const canopyLight = new THREE.PointLight(0xfffbeb, 2.2, 22);
+    canopyLight.position.set(2.0, 3.8, 6.0);
+    canopyGroup.add(canopyLight);
+
+    // Hospital Entrance Frieze Signboard
+    const signCanvas = document.createElement('canvas');
+    signCanvas.width = 1024;
+    signCanvas.height = 160;
+    const sCtx = signCanvas.getContext('2d');
+    sCtx.fillStyle = '#0b1322';
+    sCtx.fillRect(0, 0, 1024, 160);
+    sCtx.strokeStyle = '#0284c7';
+    sCtx.lineWidth = 4;
+    sCtx.strokeRect(4, 4, 1016, 152);
+    sCtx.textAlign = 'center';
+    sCtx.font = 'bold 50px "Inter", "Segoe UI", sans-serif';
+    sCtx.fillStyle = '#ffffff';
+    sCtx.fillText('METROPOLITAN GENERAL HOSPITAL', 512, 68);
+    sCtx.font = '600 30px "Inter", sans-serif';
+    sCtx.fillStyle = '#38bdf8';
+    sCtx.fillText('MAIN ENTRANCE • EMERGENCY & CRITICAL CARE', 512, 120);
+
+    const signTex = new THREE.CanvasTexture(signCanvas);
+    const signMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(14, 2.2),
+      new THREE.MeshBasicMaterial({ map: signTex, transparent: true })
+    );
+    signMesh.position.set(2.0, canopyH + 1.4, 5.0);
+    signMesh.rotation.y = 0.12;
+    canopyGroup.add(signMesh);
+
+    campusGroup.add(canopyGroup);
+
+    // ══════════════════════════════════════════════════════════════
+    //  9. THREE EMERGENCY AMBULANCES (MATCHING IMAGE 2 EXACTLY!)
+    // ══════════════════════════════════════════════════════════════
+
+    // Ambulance 1: Parked under left canopy wing
+    const amb1 = createAmbulance(-7.2, 7.8, 0.35);
+    campusGroup.add(amb1);
+
+    // Ambulance 2: On the curved right driveway loop (heading forward)
+    const amb2 = createAmbulance(36.0, 24.0, 2.3);
+    campusGroup.add(amb2);
+
+    // Ambulance 3: On the left access driveway
+    const amb3 = createAmbulance(-38.0, 9.0, 0.95);
+    campusGroup.add(amb3);
+
+    // ══════════════════════════════════════════════════════════════
+    //  10. DENSE FLOWERING BUSHES & CANOPY TREES (IMAGE 2!)
+    // ══════════════════════════════════════════════════════════════
+
+    // Purple / Magenta Flowering Hedges lining the driveway & pond curves
+    const bushPositions = [
+      [-10, 16], [-13, 17], [-16, 19], [-19, 22], [-22, 26],
+      [-5, 20], [-2, 23], [2, 25], [6, 26], [10, 26],
+      [15, 25], [20, 24], [25, 23], [29, 21], [33, 18],
+      [22, 29], [26, 32], [30, 35], [34, 38], [38, 42],
+      [-6, 32], [-8, 36], [-11, 44], [-17, 47], [-22, 43],
+      [-26, 38], [-28, 32], [-25, 26],
+      [12, -2.5], [16, -2.5], [20, -2.5], [24, -2.5], [28, -2.5],
+      [-18, -2.5], [-22, -2.5], [-26, -2.5], [-30, -2.5],
+    ];
+
+    bushPositions.forEach(([bx, bz]) => {
+      campusGroup.add(createFloweringBush(bx, bz, 0.75 + Math.random() * 0.35));
+    });
+
+    // Organic Leafy Trees positioned exactly as in Image 2:
+    // Surrounding the curved loop, framing the pond, and around hospital wings
+    const treePositions = [
+      // Curved road border trees (foreground & midground)
+      [-6, 18, 1.1], [-12, 20, 1.2], [-18, 24, 1.0],
+      [18, 22, 1.2], [24, 21, 1.15], [30, 19, 1.3],
+      [24, 31, 1.25], [29, 36, 1.1], [35, 42, 1.2], [42, 48, 1.3],
+      [48, 36, 1.15], [52, 25, 1.2], [54, 14, 1.25],
+      // Pond boundary trees
+      [-4, 30, 1.15], [-7, 39, 1.3], [-14, 49, 1.2], [-24, 47, 1.1],
+      // Left driveway trees
+      [-28, 14, 1.2], [-34, 18, 1.25], [-42, 12, 1.3], [-46, 5, 1.1],
+      // Rear building flanking trees
+      [-36, -10, 1.3], [-42, -6, 1.2],
+      [58, -4, 1.3], [64, 4, 1.2],
+    ];
+
+    treePositions.forEach(([tx, tz, ts]) => {
+      campusGroup.add(createHospitalTree(tx, tz, ts));
+    });
+
+    // ══════════════════════════════════════════════════════════════
+    //  11. CLICKABLE INTERACTIVE ENTRANCE BEACON / HOTSPOT
+    // ══════════════════════════════════════════════════════════════
+    const beaconGroup = new THREE.Group();
+    beaconGroup.position.set(1.0, 0.4, 7.5);
+
+    const ringMatBeacon = new THREE.MeshBasicMaterial({
+      color: 0x0284c7,
       transparent: true,
-      opacity: 0.25,
-      roughness: 0.05,
-      metalness: 0.9,
+      opacity: 0.85,
+      side: THREE.DoubleSide,
     });
-    const vestibule = new THREE.Mesh(new THREE.BoxGeometry(22, 5.2, 6), entryGlassMat);
-    vestibule.position.set(0, 2.6, 1);
-    entranceGroup.add(vestibule);
+    const beaconRing = new THREE.Mesh(new THREE.RingGeometry(1.6, 2.0, 32), ringMatBeacon);
+    beaconRing.rotation.x = -Math.PI / 2;
+    beaconGroup.add(beaconRing);
 
-    // Warm Interior Lobby Glow visible through entrance glass
-    const lobbyWarmGlow = new THREE.PointLight(0xfffaed, 2.5, 18);
-    lobbyWarmGlow.position.set(0, 2.5, -2);
-    entranceGroup.add(lobbyWarmGlow);
+    const beaconCenter = new THREE.Mesh(
+      new THREE.CircleGeometry(1.2, 32),
+      new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+    );
+    beaconCenter.rotation.x = -Math.PI / 2;
+    beaconGroup.add(beaconCenter);
 
-    campusGroup.add(entranceGroup);
+    campusGroup.add(beaconGroup);
 
-    // ── 10. CAMPUS LANDSCAPING, TREES & VEHICLES ──────────────────
-    // Parked Ambulance in Emergency Bay
-    const amb = createAmbulance(23, 20, Math.PI * 0.48);
-    campusGroup.add(amb);
-    ambulanceRef.current = amb;
+    // ── Raycaster for clicking entrance ─────────────────────────
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
 
-    // Parked Visitor & Doctor Vehicles
-    campusGroup.add(createCar(-25, 20, -Math.PI * 0.5, 0x0284c7)); // Blue Sedan
-    campusGroup.add(createCar(-18, 20, -Math.PI * 0.5, 0x475569)); // Slate SUV
-    campusGroup.add(createCar(-11, 20, -Math.PI * 0.5, 0x0f172a)); // Black Sedan
-    campusGroup.add(createCar(8, 38, Math.PI, 0xdc2626)); // Red Compact
-
-    // Trees along perimeter and courtyard
-    [
-      [-36, 12, 1.2], [-36, 26, 1.1], [-36, 40, 1.3],
-      [36, 12, 1.2], [36, 26, 1.1], [36, 40, 1.3],
-      [-20, 48, 1.0], [0, 48, 1.2], [20, 48, 1.0],
-      [-30, -10, 1.4], [30, -10, 1.4]
-    ].forEach(([tx, tz, ts]) => {
-      campusGroup.add(createTree(tx, tz, ts));
-    });
-
-    // Streetlights along drop-off lane
-    campusGroup.add(createStreetlight(-18, 3.2, 0));
-    campusGroup.add(createStreetlight(18, 3.2, 0));
-    campusGroup.add(createStreetlight(-28, 48.2, Math.PI));
-    campusGroup.add(createStreetlight(28, 48.2, Math.PI));
-
-    // ── 11. Interactive Raycasting & Click Navigation ─────────────
-    let mouseDownPos = { x: 0, y: 0 };
-    let isDragging = false;
-
-    function onMouseDown(e) {
-      mouseDownPos = { x: e.clientX, y: e.clientY };
-      isDragging = false;
-    }
-
-    function onMouseUp(e) {
-      if (Math.abs(e.clientX - mouseDownPos.x) > 5 || Math.abs(e.clientY - mouseDownPos.y) > 5) {
-        isDragging = true;
-      }
-    }
-
-    function onMouseMove(e) {
-      if (!container) return;
+    const handlePointerDown = (event) => {
       const rect = container.getBoundingClientRect();
-      mouseRef.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      mouseRef.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-      raycasterRef.current.setFromCamera(mouseRef.current, camera);
-      const hits = raycasterRef.current.intersectObjects([entranceGroup, tower], true);
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects([canopySlab, glassEntrance, beaconRing, beaconCenter, steps], true);
 
-      container.style.cursor = (hits.length > 0 && !isTransitioningRef.current) ? 'pointer' : 'default';
-    }
-
-    function onClick(e) {
-      if (isDragging || isTransitioningRef.current) return;
-      triggerLobbyTransition();
-    }
-
-    function triggerLobbyTransition() {
-      if (isTransitioningRef.current) return;
-      isTransitioningRef.current = true;
-      controls.autoRotate = false;
-
-      // Cinematic dolly camera zoom directly into the hospital entrance lobby doors
-      const startCam = camera.position.clone();
-      const endCam = new THREE.Vector3(0, 3.5, 14);
-      const startTgt = controls.target.clone();
-      const endTgt = new THREE.Vector3(0, 3.0, 0);
-
-      const startTime = performance.now();
-      const duration = 1300;
-
-      function animateDolly(now) {
-        const elapsed = now - startTime;
-        const progress = Math.min(elapsed / duration, 1.0);
-        const ease = progress < 0.5
-          ? 4 * progress * progress * progress
-          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-
-        camera.position.lerpVectors(startCam, endCam, ease);
-        controls.target.lerpVectors(startTgt, endTgt, ease);
-        controls.update();
-
-        if (progress < 1.0) {
-          requestAnimationFrame(animateDolly);
-        } else {
-          if (onEnterFloorRef.current) {
-            onEnterFloorRef.current();
-          }
-        }
+      if (intersects.length > 0) {
+        handleEnterHospital();
       }
+    };
 
-      requestAnimationFrame(animateDolly);
-    }
+    container.addEventListener('pointerdown', handlePointerDown);
 
-    container.addEventListener('mousedown', onMouseDown);
-    container.addEventListener('mouseup', onMouseUp);
-    container.addEventListener('mousemove', onMouseMove);
-    container.addEventListener('click', onClick);
-
-    // ── 12. Animation Loop ────────────────────────────────────────
+    // ── 12. Animation Loop ──────────────────────────────────────
     const clock = new THREE.Clock();
 
     function animate() {
       animFrameRef.current = requestAnimationFrame(animate);
-      const time = clock.getElapsedTime();
+      const delta = Math.min(clock.getDelta(), 0.05);
+      const elapsed = clock.getElapsedTime();
+
+      // Pulsing beacon ring
+      const pulse = Math.sin(elapsed * 3.0) * 0.2 + 0.8;
+      beaconRing.scale.set(pulse, pulse, 1);
+      ringMatBeacon.opacity = 0.5 + pulse * 0.4;
 
       controls.update();
-
-      // Ambulance siren flash alternation
-      if (ambulanceRef.current && ambulanceRef.current.userData) {
-        const { sirenLightRed, sirenLightBlue } = ambulanceRef.current.userData;
-        const flash = Math.sin(time * 12);
-        sirenLightRed.intensity = flash > 0 ? 3.5 : 0.2;
-        sirenLightBlue.intensity = flash <= 0 ? 3.5 : 0.2;
-      }
-
-      // Gentle breathing pulse for Floor 3 ICU environmental ribbon
-      if (icuGlowRef.current) {
-        icuGlowRef.current.intensity = 2.0 + Math.sin(time * 2.5) * 0.6;
-      }
-
       renderer.render(scene, camera);
     }
 
     animate();
 
-    // ── 13. Responsive Resize ─────────────────────────────────────
-    function handleResize() {
+    // ── 13. Resize Handler ──────────────────────────────────────
+    function onResize() {
       if (!container) return;
       camera.aspect = container.clientWidth / container.clientHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(container.clientWidth, container.clientHeight);
     }
-    window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', onResize);
 
-    // ── 14. Cleanup ───────────────────────────────────────────────
+    // ── 14. Cleanup ────────────────────────────────────────────
     return () => {
-      cancelAnimationFrame(animFrameRef.current);
-      window.removeEventListener('resize', handleResize);
-      container.removeEventListener('mousedown', onMouseDown);
-      container.removeEventListener('mouseup', onMouseUp);
-      container.removeEventListener('mousemove', onMouseMove);
-      container.removeEventListener('click', onClick);
+      window.removeEventListener('resize', onResize);
+      container.removeEventListener('pointerdown', handlePointerDown);
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       controls.dispose();
       renderer.dispose();
       if (container.contains(renderer.domElement)) {
@@ -892,97 +972,112 @@ export default function HospitalExterior3D({ rooms, onEnterFloor }) {
   }, []);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
+    <div className="scene-3d-container daytime-exterior-container" style={{ width: '100%', height: '100%', borderRadius: 0, border: 'none' }}>
+      {/* Top Banner Tag */}
+      <div className="scene-3d-label daytime-label">
+        <span className="scene-3d-label-icon">🏥</span>
+        LEVEL 1 — METROPOLITAN HOSPITAL CAMPUS • 3D ARCHITECTURAL TWIN
+      </div>
+
       {/* 3D Canvas Host Container */}
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
-      {/* Modern Glassmorphic HUD Badge (Top-Left) */}
+      {/* Primary Floating Action Overlay: Enter Hospital Reception */}
       <div
-        style={{
-          position: 'absolute',
-          top: '20px',
-          left: '20px',
-          background: 'rgba(10, 17, 32, 0.85)',
-          backdropFilter: 'blur(12px)',
-          border: '1px solid rgba(0, 240, 255, 0.35)',
-          borderRadius: '12px',
-          padding: '12px 20px',
-          color: '#ffffff',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
-          pointerEvents: 'none',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '4px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '18px' }}>🏢</span>
-          <span style={{ fontWeight: 700, fontSize: '15px', letterSpacing: '0.05em', color: '#38bdf8' }}>
-            LEVEL 1 — METROPOLITAN GENERAL HOSPITAL CAMPUS
-          </span>
-        </div>
-        <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-          Level 3: ICU Air Quality Monitoring Wing • Architectural BIM Simulation
-        </div>
-      </div>
-
-      {/* Interactive Call-To-Action Floating Badge (Bottom Center) */}
-      <div
-        onClick={() => {
-          if (onEnterFloorRef.current) onEnterFloorRef.current();
-        }}
         style={{
           position: 'absolute',
           bottom: '24px',
           left: '50%',
           transform: 'translateX(-50%)',
-          background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.9), rgba(14, 165, 233, 0.95))',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid #00f0ff',
-          borderRadius: '30px',
-          padding: '12px 28px',
-          color: '#ffffff',
-          fontWeight: 700,
-          fontSize: '14px',
-          letterSpacing: '0.08em',
-          cursor: 'pointer',
-          boxShadow: '0 0 25px rgba(0, 240, 255, 0.5), 0 4px 15px rgba(0,0,0,0.4)',
           display: 'flex',
           alignItems: 'center',
-          gap: '10px',
-          transition: 'all 0.25s ease',
-          userSelect: 'none',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'translateX(-50%) scale(1.05)';
-          e.currentTarget.style.boxShadow = '0 0 35px rgba(0, 240, 255, 0.8), 0 6px 20px rgba(0,0,0,0.5)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'translateX(-50%) scale(1.0)';
-          e.currentTarget.style.boxShadow = '0 0 25px rgba(0, 240, 255, 0.5), 0 4px 15px rgba(0,0,0,0.4)';
+          gap: '12px',
+          padding: '10px 18px',
+          background: 'rgba(11, 19, 35, 0.92)',
+          border: '1px solid #1e293b',
+          borderRadius: '12px',
+          boxShadow: '0 12px 36px rgba(0, 0, 0, 0.65)',
+          backdropFilter: 'blur(12px)',
+          zIndex: 30,
         }}
       >
-        <span style={{ fontSize: '16px' }}>🚪</span>
-        <span>CLICK ENTRANCE TO ENTER LOBBY ATRIUM →</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div
+            style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              backgroundColor: '#10b981',
+              boxShadow: '0 0 8px #10b981',
+            }}
+          />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '11px', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.04em' }}>
+              MAIN HOSPITAL CAMPUS
+            </span>
+            <span style={{ fontSize: '10px', color: '#94a3b8' }}>
+              Click Entrance Canopy or button to enter Reception (Level 2)
+            </span>
+          </div>
+        </div>
+
+        <button
+          onClick={handleEnterHospital}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+            border: 'none',
+            borderRadius: '8px',
+            color: '#ffffff',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            boxShadow: '0 4px 14px rgba(2, 132, 199, 0.4)',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-1px)';
+            e.currentTarget.style.boxShadow = '0 6px 18px rgba(2, 132, 199, 0.6)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 4px 14px rgba(2, 132, 199, 0.4)';
+          }}
+        >
+          <Building2 size={15} />
+          <span>ENTER RECEPTION LOBBY</span>
+          <ArrowRight size={14} />
+        </button>
       </div>
 
-      {/* Navigation Helper Tip (Bottom Right) */}
+      {/* Left Feature Card: Campus Overview & 5 Monitored ICU Suites */}
       <div
         style={{
           position: 'absolute',
-          bottom: '24px',
-          right: '24px',
-          background: 'rgba(10, 17, 32, 0.75)',
-          backdropFilter: 'blur(8px)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-          borderRadius: '8px',
-          padding: '8px 14px',
-          color: '#94a3b8',
-          fontSize: '11px',
-          pointerEvents: 'none',
+          top: '18px',
+          left: '18px',
+          background: 'rgba(11, 19, 35, 0.88)',
+          border: '1px solid #1e293b',
+          borderRadius: '10px',
+          padding: '12px 16px',
+          width: '260px',
+          backdropFilter: 'blur(10px)',
+          zIndex: 20,
         }}
       >
-        Left Click + Drag: Orbit Campus • Scroll: Zoom • Right Click: Pan
+        <div style={{ fontSize: '11px', fontWeight: 800, color: '#38bdf8', letterSpacing: '0.04em', marginBottom: '4px' }}>
+          HOSPITAL DIGITAL TWIN
+        </div>
+        <div style={{ fontSize: '10px', color: '#94a3b8', lineHeight: 1.4, marginBottom: '8px' }}>
+          Modern 4-story clinical facility with acute care pavilion, emergency porte-cochère, and Level 3 Bio-HVAC surveillance.
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #1e293b', paddingTop: '6px' }}>
+          <span style={{ fontSize: '10px', color: '#64748b' }}>Monitored ICU Suites:</span>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: '#10b981' }}>5 Units Active</span>
+        </div>
       </div>
     </div>
   );

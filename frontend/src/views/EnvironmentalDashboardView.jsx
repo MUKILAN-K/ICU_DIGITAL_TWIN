@@ -791,3 +791,4 @@ function ForecastSvgChart({ history = [], forecast = [], unit = '', safeThreshol
     </svg>
   );
 }
+
