@@ -20,9 +20,12 @@ export default function SettingsView() {
     thresholds,
     setThresholds,
     isSimulationPaused,
-    setIsSimulationPaused,
-    simulationSpeedMs,
-    setSimulationSpeedMs,
+    togglePause,
+    simulationSpeedSeconds,
+    setSpeed,
+    activeScenario,
+    triggerScenario,
+    selectedRoomId,
     wsStatus,
   } = useICU();
 
@@ -70,7 +73,7 @@ export default function SettingsView() {
           </h1>
         </div>
         <p style={{ margin: 0, fontSize: '13px', color: '#94a3b8' }}>
-          Configure demonstration threshold parameters, simulation clock speeds, and telemetry sources.
+          Configure demonstration threshold parameters, simulation clock speeds, and repeatable simulation scenarios.
         </p>
       </div>
 
@@ -100,7 +103,120 @@ export default function SettingsView() {
         </div>
       </div>
 
-      {/* ─── SIMULATION CONTROLS CARD ───────────────────────────────── */}
+      {/* ─── SIMULATION SCENARIO TRIGGER CONTROLS (Phase 4 & 5) ──────── */}
+      <div
+        style={{
+          background: '#0c1322',
+          border: '1px solid #1e293b',
+          borderRadius: '10px',
+          padding: '20px',
+          marginBottom: '28px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+          <Sliders size={16} color="#0ea5e9" />
+          <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: '#ffffff' }}>
+            Repeatable Simulation Scenario Injection
+          </h2>
+        </div>
+        <p style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 16px 0' }}>
+          Active Mode: <strong style={{ color: '#38bdf8' }}>{activeScenario.toUpperCase()}</strong>. Target Room: <strong style={{ color: '#ffffff' }}>{selectedRoomId}</strong>
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+          <button
+            onClick={() => triggerScenario('stable')}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '6px',
+              border: activeScenario === 'stable' ? '1px solid #0284c7' : '1px solid #1e293b',
+              background: activeScenario === 'stable' ? 'rgba(2, 132, 199, 0.2)' : '#0f172a',
+              color: activeScenario === 'stable' ? '#38bdf8' : '#f8fafc',
+              fontWeight: 600,
+              fontSize: '12px',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <div>Stable Baseline</div>
+            <div style={{ fontSize: '10px', color: '#64748b' }}>Normal optimal ranges</div>
+          </button>
+
+          <button
+            onClick={() => triggerScenario('increasing', selectedRoomId)}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '6px',
+              border: activeScenario === 'increasing' ? '1px solid #0284c7' : '1px solid #1e293b',
+              background: activeScenario === 'increasing' ? 'rgba(2, 132, 199, 0.2)' : '#0f172a',
+              color: activeScenario === 'increasing' ? '#38bdf8' : '#f8fafc',
+              fontWeight: 600,
+              fontSize: '12px',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <div>Gradual Drift</div>
+            <div style={{ fontSize: '10px', color: '#64748b' }}>Creeping accumulation</div>
+          </button>
+
+          <button
+            onClick={() => triggerScenario('sudden_spike', selectedRoomId)}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '6px',
+              border: activeScenario === 'sudden_spike' ? '1px solid #0284c7' : '1px solid #1e293b',
+              background: activeScenario === 'sudden_spike' ? 'rgba(2, 132, 199, 0.2)' : '#0f172a',
+              color: activeScenario === 'sudden_spike' ? '#38bdf8' : '#f8fafc',
+              fontWeight: 600,
+              fontSize: '12px',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <div>Sudden Acute Spike</div>
+            <div style={{ fontSize: '10px', color: '#64748b' }}>Aerosol / Sterilizer spill</div>
+          </button>
+
+          <button
+            onClick={() => triggerScenario('room_disturbance', selectedRoomId)}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '6px',
+              border: activeScenario === 'room_disturbance' ? '1px solid #0284c7' : '1px solid #1e293b',
+              background: activeScenario === 'room_disturbance' ? 'rgba(2, 132, 199, 0.2)' : '#0f172a',
+              color: activeScenario === 'room_disturbance' ? '#38bdf8' : '#f8fafc',
+              fontWeight: 600,
+              fontSize: '12px',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <div>Room Disturbance</div>
+            <div style={{ fontSize: '10px', color: '#64748b' }}>Target only {selectedRoomId}</div>
+          </button>
+
+          <button
+            onClick={() => triggerScenario('recovery', selectedRoomId)}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '6px',
+              border: activeScenario === 'recovery' ? '1px solid #0284c7' : '1px solid #1e293b',
+              background: activeScenario === 'recovery' ? 'rgba(2, 132, 199, 0.2)' : '#0f172a',
+              color: activeScenario === 'recovery' ? '#38bdf8' : '#f8fafc',
+              fontWeight: 600,
+              fontSize: '12px',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <div>HVAC Purge Recovery</div>
+            <div style={{ fontSize: '10px', color: '#64748b' }}>Rapid baseline return</div>
+          </button>
+        </div>
+      </div>
+
+      {/* ─── SIMULATION ENGINE CONTROLS ─────────────────────────────── */}
       <div
         style={{
           background: '#0c1322',
@@ -116,21 +232,16 @@ export default function SettingsView() {
               Simulation Engine Controls
             </h2>
             <div style={{ fontSize: '12px', color: '#64748b' }}>
-              Current Status:{' '}
-              <span
-                style={{
-                  color: wsStatus === 'connected' ? '#10b981' : '#38bdf8',
-                  fontWeight: 600,
-                }}
-              >
-                {wsStatus === 'connected' ? 'Connected to WebSocket Backend' : 'Active Client Simulation'}
+              Connection Source:{' '}
+              <span style={{ color: wsStatus === 'connected' ? '#10b981' : '#38bdf8', fontWeight: 600 }}>
+                {wsStatus === 'connected' ? 'FastAPI WebSocket Backend (Live)' : 'Internal Simulation Engine'}
               </span>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
-              onClick={() => setIsSimulationPaused(!isSimulationPaused)}
+              onClick={togglePause}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -173,29 +284,29 @@ export default function SettingsView() {
 
         {/* Speed Selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>Heartbeat Update Interval:</span>
-          {[1000, 2500, 5000].map((ms) => (
+          <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>Heartbeat Interval:</span>
+          {[1.0, 2.5, 5.0, 10.0].map((sec) => (
             <button
-              key={ms}
-              onClick={() => setSimulationSpeedMs(ms)}
+              key={sec}
+              onClick={() => setSpeed(sec)}
               style={{
                 padding: '5px 12px',
                 borderRadius: '5px',
-                border: simulationSpeedMs === ms ? '1px solid #0284c7' : '1px solid #1e293b',
-                background: simulationSpeedMs === ms ? 'rgba(2, 132, 199, 0.25)' : '#0f172a',
-                color: simulationSpeedMs === ms ? '#ffffff' : '#94a3b8',
+                border: simulationSpeedSeconds === sec ? '1px solid #0284c7' : '1px solid #1e293b',
+                background: simulationSpeedSeconds === sec ? 'rgba(2, 132, 199, 0.25)' : '#0f172a',
+                color: simulationSpeedSeconds === sec ? '#ffffff' : '#94a3b8',
                 fontSize: '12px',
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
             >
-              {ms / 1000}s ({ms === 2500 ? 'Default' : ms === 1000 ? 'Fast' : 'Slow'})
+              {sec}s {sec === 5.0 ? '(Standard)' : sec === 1.0 ? '(Fast)' : ''}
             </button>
           ))}
         </div>
       </div>
 
-      {/* ─── BIOMETRIC THRESHOLD INPUTS ─────────────────────────────── */}
+      {/* ─── ENVIRONMENTAL AIR QUALITY THRESHOLDS ──────────────────── */}
       <div
         style={{
           background: '#0c1322',
@@ -206,84 +317,9 @@ export default function SettingsView() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-          <Activity size={16} color="#0ea5e9" />
-          <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: '#ffffff' }}>
-            Biometric Alert Thresholds
-          </h2>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-          {/* Heart Rate */}
-          <ThresholdRow
-            label="Heart Rate Warning Max"
-            unit="bpm"
-            value={thresholds.heartRate.normalMax}
-            onChange={(v) => handleThresholdChange('heartRate', 'normalMax', v)}
-          />
-          <ThresholdRow
-            label="Heart Rate Critical Alert Max"
-            unit="bpm"
-            value={thresholds.heartRate.warningMax}
-            onChange={(v) => handleThresholdChange('heartRate', 'warningMax', v)}
-          />
-
-          {/* SpO2 */}
-          <ThresholdRow
-            label="SpO2 Warning Min"
-            unit="%"
-            value={thresholds.spo2.normalMin}
-            onChange={(v) => handleThresholdChange('spo2', 'normalMin', v)}
-          />
-          <ThresholdRow
-            label="SpO2 Critical Alert Min"
-            unit="%"
-            value={thresholds.spo2.warningMin}
-            onChange={(v) => handleThresholdChange('spo2', 'warningMin', v)}
-          />
-
-          {/* Respiratory Rate */}
-          <ThresholdRow
-            label="Resp. Rate Warning Max"
-            unit="rpm"
-            value={thresholds.respiratoryRate.normalMax}
-            onChange={(v) => handleThresholdChange('respiratoryRate', 'normalMax', v)}
-          />
-          <ThresholdRow
-            label="Resp. Rate Critical Max"
-            unit="rpm"
-            value={thresholds.respiratoryRate.warningMax}
-            onChange={(v) => handleThresholdChange('respiratoryRate', 'warningMax', v)}
-          />
-
-          {/* Temperature */}
-          <ThresholdRow
-            label="Core Temp Warning Max"
-            unit="°C"
-            value={thresholds.temperature.normalMax}
-            onChange={(v) => handleThresholdChange('temperature', 'normalMax', v)}
-          />
-          <ThresholdRow
-            label="Core Temp Critical Max"
-            unit="°C"
-            value={thresholds.temperature.warningMax}
-            onChange={(v) => handleThresholdChange('temperature', 'warningMax', v)}
-          />
-        </div>
-      </div>
-
-      {/* ─── ENVIRONMENTAL / HVAC THRESHOLDS ────────────────────────── */}
-      <div
-        style={{
-          background: '#0c1322',
-          border: '1px solid #1e293b',
-          borderRadius: '10px',
-          padding: '20px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
           <Wind size={16} color="#0ea5e9" />
           <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: '#ffffff' }}>
-            Bio-HVAC Air Quality Thresholds (WHO / ASHRAE)
+            Bio-HVAC Air Quality Thresholds (WHO / ASHRAE Standards)
           </h2>
         </div>
 
@@ -302,6 +338,19 @@ export default function SettingsView() {
           />
 
           <ThresholdRow
+            label="PM10 Warning Limit"
+            unit="µg/m³"
+            value={thresholds.pm10.normalMax}
+            onChange={(v) => handleThresholdChange('pm10', 'normalMax', v)}
+          />
+          <ThresholdRow
+            label="PM10 Critical Limit"
+            unit="µg/m³"
+            value={thresholds.pm10.warningMax}
+            onChange={(v) => handleThresholdChange('pm10', 'warningMax', v)}
+          />
+
+          <ThresholdRow
             label="CO2 Warning Limit"
             unit="ppm"
             value={thresholds.co2.normalMax}
@@ -312,6 +361,19 @@ export default function SettingsView() {
             unit="ppm"
             value={thresholds.co2.warningMax}
             onChange={(v) => handleThresholdChange('co2', 'warningMax', v)}
+          />
+
+          <ThresholdRow
+            label="Ambient Temp Safe Max"
+            unit="°C"
+            value={thresholds.temperature.normalMax}
+            onChange={(v) => handleThresholdChange('temperature', 'normalMax', v)}
+          />
+          <ThresholdRow
+            label="Ambient Temp Critical Max"
+            unit="°C"
+            value={thresholds.temperature.warningMax}
+            onChange={(v) => handleThresholdChange('temperature', 'warningMax', v)}
           />
         </div>
       </div>

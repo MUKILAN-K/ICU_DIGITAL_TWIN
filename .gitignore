@@ -40,3 +40,7 @@ npm-debug.log*
 
 # Vite
 frontend/.vite/
+
+# SQLite temp files
+*.db-shm
+*.db-wal

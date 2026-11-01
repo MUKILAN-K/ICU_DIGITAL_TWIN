@@ -46,13 +46,13 @@ const STATUS_CONFIG = {
   },
 };
 
-// 5-Room Clinical Floor Layout
+// 5-Room Clinical Floor Layout with Canonical Identifiers
 const ROOM_LAYOUT = [
-  { id: 'ICU-101', bedNum: 'Bed 1', name: 'Bed 1 — Negative Pressure Isolation', x: -8.8, z: -5.4, w: 7.4, d: 5.8 },
-  { id: 'ICU-102', bedNum: 'Bed 2', name: 'Bed 2 — General ICU Suite A',               x: 0.0,  z: -5.4, w: 7.4, d: 5.8 },
-  { id: 'ICU-103', bedNum: 'Bed 3', name: 'Bed 3 — General ICU Suite B',               x: 8.8,  z: -5.4, w: 7.4, d: 5.8 },
-  { id: 'ICU-104', bedNum: 'Bed 4', name: 'Bed 4 — Neuro-Trauma Suite',                x: -4.4, z: 5.4,  w: 7.4, d: 5.8 },
-  { id: 'ICU-105', bedNum: 'Bed 5', name: 'Bed 5 — Post-Op Surgical Recovery',         x: 4.4,  z: 5.4,  w: 7.4, d: 5.8 },
+  { id: 'ICU-01', alias: 'ICU-101', bedNum: 'ICU-01', name: 'Bed 1 — Negative Pressure Isolation', x: -8.8, z: -5.4, w: 7.4, d: 5.8 },
+  { id: 'ICU-02', alias: 'ICU-102', bedNum: 'ICU-02', name: 'Bed 2 — General ICU Suite A',         x: 0.0,  z: -5.4, w: 7.4, d: 5.8 },
+  { id: 'ICU-03', alias: 'ICU-103', bedNum: 'ICU-03', name: 'Bed 3 — General ICU Suite B',         x: 8.8,  z: -5.4, w: 7.4, d: 5.8 },
+  { id: 'ICU-04', alias: 'ICU-104', bedNum: 'ICU-04', name: 'Bed 4 — Neuro-Trauma Suite',          x: -4.4, z: 5.4,  w: 7.4, d: 5.8 },
+  { id: 'ICU-05', alias: 'ICU-105', bedNum: 'ICU-05', name: 'Bed 5 — Post-Op Surgical Recovery',   x: 4.4,  z: 5.4,  w: 7.4, d: 5.8 },
 ];
 
 /** Procedural Hallway Runner Texture with Directional Wayfinding Guides */

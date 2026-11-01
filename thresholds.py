@@ -44,14 +44,28 @@ STATUS_RANK = {
     "alert": 3
 }
 
+PARAM_MAP = {
+    "pm25": "pm25",
+    "pm25_ug_m3": "pm25",
+    "pm10": "pm10",
+    "pm10_ug_m3": "pm10",
+    "co2": "co2",
+    "co2_ppm": "co2",
+    "temperature": "temperature",
+    "temperature_c": "temperature",
+    "humidity": "humidity",
+    "relative_humidity_pct": "humidity",
+}
+
 
 def evaluate_metric(metric: str, value: float) -> str:
     """Evaluates a single parameter reading against defined WHO/ASHRAE thresholds."""
-    config = THRESHOLDS.get(metric)
+    norm_metric = PARAM_MAP.get(metric, metric)
+    config = THRESHOLDS.get(norm_metric)
     if not config:
         return "safe"
 
-    if metric in ("pm25", "pm10", "co2"):
+    if norm_metric in ("pm25", "pm10", "co2"):
         if value <= config["safe_max"]:
             return "safe"
         elif value <= config["warning_max"]:
@@ -59,7 +73,7 @@ def evaluate_metric(metric: str, value: float) -> str:
         else:
             return "alert"
 
-    elif metric in ("temperature", "humidity"):
+    elif norm_metric in ("temperature", "humidity"):
         if config["safe_min"] <= value <= config["safe_max"]:
             return "safe"
         elif config["warning_min"] <= value <= config["warning_max"]:
@@ -75,18 +89,35 @@ def evaluate_room_status(reading: Dict[str, Any]) -> Dict[str, Any]:
     Evaluates all parameters of a reading dict and returns an overall room status
     along with breakdown per parameter.
     """
-    metrics = ["pm25", "pm10", "co2", "temperature", "humidity"]
+    metrics = [
+        ("pm25", ["pm25", "pm25_ug_m3"]),
+        ("pm10", ["pm10", "pm10_ug_m3"]),
+        ("co2", ["co2", "co2_ppm"]),
+        ("temperature", ["temperature", "temperature_c"]),
+        ("humidity", ["humidity", "relative_humidity_pct"]),
+    ]
+
     breakdown = {}
     highest_status = "safe"
 
-    for m in metrics:
-        if m in reading and reading[m] is not None:
-            val = float(reading[m])
-            status = evaluate_metric(m, val)
-            breakdown[m] = {
+    for std_name, aliases in metrics:
+        val = None
+        for a in aliases:
+            if a in reading and reading[a] is not None:
+                try:
+                    val = float(reading[a])
+                    break
+                except (ValueError, TypeError):
+                    continue
+
+        if val is not None:
+            status = evaluate_metric(std_name, val)
+            breakdown[std_name] = {
                 "value": round(val, 2),
-                "unit": THRESHOLDS[m]["unit"],
-                "status": status
+                "unit": THRESHOLDS[std_name]["unit"],
+                "status": status,
+                "threshold_safe": THRESHOLDS[std_name].get("safe_max", THRESHOLDS[std_name].get("safe_min")),
+                "threshold_warning": THRESHOLDS[std_name].get("warning_max"),
             }
             if STATUS_RANK[status] > STATUS_RANK[highest_status]:
                 highest_status = status

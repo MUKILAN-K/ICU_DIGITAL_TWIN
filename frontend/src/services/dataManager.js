@@ -1,6 +1,13 @@
 /**
  * ICU Digital Twin - Central Data & Threshold Configuration
  * 
+ * Standardizes 5 canonical rooms (ICU-01 through ICU-05) and environmental parameters:
+ * 1. PM2.5 (µg/m³)
+ * 2. PM10 (µg/m³)
+ * 3. CO2 (ppm)
+ * 4. Temperature (°C)
+ * 5. Relative Humidity (%)
+ * 
  * DISCLAIMER:
  * DEMO DATA / SIMULATION ONLY.
  * Thresholds and physiological mock values are for software demonstration
@@ -8,7 +15,48 @@
  */
 
 export const DEMO_THRESHOLDS = {
-  // Biometrics
+  // Environmental / HVAC (WHO & ASHRAE Guidelines)
+  pm25: {
+    unit: 'µg/m³',
+    label: 'PM2.5 Particulate',
+    normalMax: 15.0,
+    warningMax: 35.0,
+  },
+  pm10: {
+    unit: 'µg/m³',
+    label: 'PM10 Particulate',
+    normalMax: 45.0,
+    warningMax: 75.0,
+  },
+  co2: {
+    unit: 'ppm',
+    label: 'CO2 Ventilation',
+    normalMax: 800.0,
+    warningMax: 1000.0,
+  },
+  temperature: {
+    unit: '°C',
+    label: 'Ambient Temperature',
+    normalMin: 20.0,
+    normalMax: 24.0,
+    warningMin: 18.0,
+    warningMax: 25.5,
+  },
+  humidity: {
+    unit: '%',
+    label: 'Relative Humidity',
+    normalMin: 40.0,
+    normalMax: 55.0,
+    warningMin: 35.0,
+    warningMax: 60.0,
+  },
+  airChangesPerHour: {
+    unit: 'ACH',
+    label: 'Air Turnover Rate',
+    normalMin: 12.0,
+    warningMin: 8.0,
+  },
+  // Patient Biometrics
   heartRate: {
     unit: 'bpm',
     label: 'Heart Rate',
@@ -31,14 +79,6 @@ export const DEMO_THRESHOLDS = {
     warningMin: 10,
     warningMax: 26,
   },
-  temperature: {
-    unit: '°C',
-    label: 'Core Temp',
-    normalMin: 36.2,
-    normalMax: 37.5,
-    warningMin: 35.5,
-    warningMax: 38.3,
-  },
   systolicBP: {
     unit: 'mmHg',
     label: 'Systolic BP',
@@ -55,44 +95,12 @@ export const DEMO_THRESHOLDS = {
     warningMin: 50,
     warningMax: 95,
   },
-  // Environmental / HVAC
-  pm25: {
-    unit: 'µg/m³',
-    label: 'PM2.5',
-    normalMax: 15.0,
-    warningMax: 35.0,
-  },
-  pm10: {
-    unit: 'µg/m³',
-    label: 'PM10',
-    normalMax: 45.0,
-    warningMax: 75.0,
-  },
-  co2: {
-    unit: 'ppm',
-    label: 'CO2 Level',
-    normalMax: 800.0,
-    warningMax: 1000.0,
-  },
-  humidity: {
-    unit: '%',
-    label: 'Humidity',
-    normalMin: 40.0,
-    normalMax: 55.0,
-    warningMin: 35.0,
-    warningMax: 60.0,
-  },
-  airChangesPerHour: {
-    unit: 'ACH',
-    label: 'Air Exchange',
-    normalMin: 12.0, // Hospital ICU standard minimum
-    warningMin: 8.0,
-  },
 };
 
 export const INITIAL_BED_PROFILES = [
   {
-    roomId: 'ICU-101',
+    roomId: 'ICU-01',
+    alias: 'ICU-101',
     bedNumber: 'Bed 1',
     name: 'Bed 1 — Negative Pressure Isolation',
     unitType: 'Negative Pressure Isolation',
@@ -114,18 +122,25 @@ export const INITIAL_BED_PROFILES = [
       diastolicBP: 78,
     },
     baseAir: {
-      pm25: 7.8,
-      pm10: 13.5,
+      pm25_ug_m3: 8.0,
+      pm10_ug_m3: 14.0,
+      co2_ppm: 440,
+      temperature_c: 21.0,
+      relative_humidity_pct: 42.0,
+      // Backward-compat aliases
+      pm25: 8.0,
+      pm10: 14.0,
       co2: 440,
       temperature: 21.0,
-      humidity: 44,
+      humidity: 42.0,
       airChangesPerHour: 14.2,
-      pressureGradient: -8.5, // Pascals (negative isolation)
+      pressureGradient: -8.5,
     },
     initialStatus: 'safe',
   },
   {
-    roomId: 'ICU-102',
+    roomId: 'ICU-02',
+    alias: 'ICU-102',
     bedNumber: 'Bed 2',
     name: 'Bed 2 — General ICU Suite A',
     unitType: 'Intensive Critical Care',
@@ -147,18 +162,24 @@ export const INITIAL_BED_PROFILES = [
       diastolicBP: 82,
     },
     baseAir: {
-      pm25: 11.2,
-      pm10: 18.4,
+      pm25_ug_m3: 11.5,
+      pm10_ug_m3: 19.0,
+      co2_ppm: 510,
+      temperature_c: 22.0,
+      relative_humidity_pct: 47.0,
+      pm25: 11.5,
+      pm10: 19.0,
       co2: 510,
       temperature: 22.0,
-      humidity: 48,
+      humidity: 47.0,
       airChangesPerHour: 13.0,
       pressureGradient: 2.5,
     },
     initialStatus: 'safe',
   },
   {
-    roomId: 'ICU-103',
+    roomId: 'ICU-03',
+    alias: 'ICU-103',
     bedNumber: 'Bed 3',
     name: 'Bed 3 — General ICU Suite B',
     unitType: 'Intensive Critical Care',
@@ -180,18 +201,24 @@ export const INITIAL_BED_PROFILES = [
       diastolicBP: 62,
     },
     baseAir: {
+      pm25_ug_m3: 28.5,
+      pm10_ug_m3: 52.0,
+      co2_ppm: 890,
+      temperature_c: 23.2,
+      relative_humidity_pct: 58.0,
       pm25: 28.5,
       pm10: 52.0,
       co2: 890,
       temperature: 23.2,
-      humidity: 58,
+      humidity: 58.0,
       airChangesPerHour: 11.2,
       pressureGradient: 1.8,
     },
     initialStatus: 'warning',
   },
   {
-    roomId: 'ICU-104',
+    roomId: 'ICU-04',
+    alias: 'ICU-104',
     bedNumber: 'Bed 4',
     name: 'Bed 4 — Neuro-Trauma Suite',
     unitType: 'Neuro-Intensive Care',
@@ -213,18 +240,24 @@ export const INITIAL_BED_PROFILES = [
       diastolicBP: 96,
     },
     baseAir: {
+      pm25_ug_m3: 42.0,
+      pm10_ug_m3: 82.0,
+      co2_ppm: 1040,
+      temperature_c: 24.8,
+      relative_humidity_pct: 63.0,
       pm25: 42.0,
       pm10: 82.0,
       co2: 1040,
       temperature: 24.8,
-      humidity: 63,
+      humidity: 63.0,
       airChangesPerHour: 9.1,
       pressureGradient: 0.5,
     },
     initialStatus: 'alert',
   },
   {
-    roomId: 'ICU-105',
+    roomId: 'ICU-05',
+    alias: 'ICU-105',
     bedNumber: 'Bed 5',
     name: 'Bed 5 — Post-Op Surgical Recovery',
     unitType: 'Surgical ICU',
@@ -246,11 +279,16 @@ export const INITIAL_BED_PROFILES = [
       diastolicBP: 74,
     },
     baseAir: {
-      pm25: 14.5,
-      pm10: 22.0,
-      co2: 605,
-      temperature: 22.5,
-      humidity: 49,
+      pm25_ug_m3: 15.0,
+      pm10_ug_m3: 24.0,
+      co2_ppm: 610,
+      temperature_c: 22.8,
+      relative_humidity_pct: 51.0,
+      pm25: 15.0,
+      pm10: 24.0,
+      co2: 610,
+      temperature: 22.8,
+      humidity: 51.0,
       airChangesPerHour: 12.8,
       pressureGradient: 3.0,
     },
@@ -258,7 +296,21 @@ export const INITIAL_BED_PROFILES = [
   },
 ];
 
-/** Evaluates overall room status based on biometrics & air quality */
+/** Canonicalizes ID: maps ICU-101 to ICU-01, etc. */
+export function canonicalizeRoomId(rawId) {
+  if (!rawId) return 'ICU-01';
+  const clean = String(rawId).trim().toUpperCase();
+  const map = {
+    'ICU-1': 'ICU-01', 'ICU-101': 'ICU-01', 'ICU-01': 'ICU-01', 'ICU_01': 'ICU-01',
+    'ICU-2': 'ICU-02', 'ICU-102': 'ICU-02', 'ICU-02': 'ICU-02', 'ICU_02': 'ICU-02',
+    'ICU-3': 'ICU-03', 'ICU-103': 'ICU-03', 'ICU-03': 'ICU-03', 'ICU_03': 'ICU-03',
+    'ICU-4': 'ICU-04', 'ICU-104': 'ICU-04', 'ICU-04': 'ICU-04', 'ICU_04': 'ICU-04',
+    'ICU-5': 'ICU-05', 'ICU-105': 'ICU-05', 'ICU-05': 'ICU-05', 'ICU_05': 'ICU-05',
+  };
+  return map[clean] || clean;
+}
+
+/** Evaluates overall room status based on biometrics & environmental air quality */
 export function evaluateBedStatus(vitals, air, thresholds = DEMO_THRESHOLDS) {
   let highestSeverity = 'safe'; // 'safe' | 'warning' | 'alert'
 
@@ -267,38 +319,45 @@ export function evaluateBedStatus(vitals, air, thresholds = DEMO_THRESHOLDS) {
     else if (level === 'warning' && highestSeverity !== 'alert') highestSeverity = 'warning';
   };
 
-  // Check Vitals
-  if (vitals.heartRate > thresholds.heartRate.warningMax || vitals.heartRate < thresholds.heartRate.warningMin) {
+  const pm25 = air.pm25_ug_m3 ?? air.pm25 ?? 0;
+  const pm10 = air.pm10_ug_m3 ?? air.pm10 ?? 0;
+  const co2 = air.co2_ppm ?? air.co2 ?? 0;
+  const temp = air.temperature_c ?? air.temperature ?? 22;
+  const humidity = air.relative_humidity_pct ?? air.humidity ?? 50;
+
+  // Check Environmental Air Quality (WHO Guidelines)
+  if (pm25 > thresholds.pm25.warningMax || co2 > thresholds.co2.warningMax || pm10 > thresholds.pm10.warningMax) {
     escalate('alert');
-  } else if (vitals.heartRate > thresholds.heartRate.normalMax || vitals.heartRate < thresholds.heartRate.normalMin) {
+  } else if (pm25 > thresholds.pm25.normalMax || co2 > thresholds.co2.normalMax || pm10 > thresholds.pm10.normalMax) {
     escalate('warning');
   }
 
-  if (vitals.spo2 < thresholds.spo2.warningMin) {
+  if (temp > thresholds.temperature.warningMax || temp < thresholds.temperature.warningMin) {
     escalate('alert');
-  } else if (vitals.spo2 < thresholds.spo2.normalMin) {
+  } else if (temp > thresholds.temperature.normalMax || temp < thresholds.temperature.normalMin) {
     escalate('warning');
   }
 
-  if (vitals.respiratoryRate > thresholds.respiratoryRate.warningMax || vitals.respiratoryRate < thresholds.respiratoryRate.warningMin) {
+  if (humidity > thresholds.humidity.warningMax || humidity < thresholds.humidity.warningMin) {
     escalate('alert');
-  } else if (vitals.respiratoryRate > thresholds.respiratoryRate.normalMax || vitals.respiratoryRate < thresholds.respiratoryRate.normalMin) {
+  } else if (humidity > thresholds.humidity.normalMax || humidity < thresholds.humidity.normalMin) {
     escalate('warning');
   }
 
-  if (vitals.temperature > thresholds.temperature.warningMax || vitals.temperature < thresholds.temperature.warningMin) {
-    escalate('alert');
-  } else if (vitals.temperature > thresholds.temperature.normalMax || vitals.temperature < thresholds.temperature.normalMin) {
-    escalate('warning');
-  }
+  // Check Physiological Vitals if present
+  if (vitals) {
+    if (vitals.heartRate > thresholds.heartRate.warningMax || vitals.heartRate < thresholds.heartRate.warningMin) {
+      escalate('alert');
+    } else if (vitals.heartRate > thresholds.heartRate.normalMax || vitals.heartRate < thresholds.heartRate.normalMin) {
+      escalate('warning');
+    }
 
-  // Check Air
-  if (air.pm25 > thresholds.pm25.warningMax || air.co2 > thresholds.co2.warningMax) {
-    escalate('alert');
-  } else if (air.pm25 > thresholds.pm25.normalMax || air.co2 > thresholds.co2.normalMax) {
-    escalate('warning');
+    if (vitals.spo2 < thresholds.spo2.warningMin) {
+      escalate('alert');
+    } else if (vitals.spo2 < thresholds.spo2.normalMin) {
+      escalate('warning');
+    }
   }
 
   return highestSeverity;
 }
-

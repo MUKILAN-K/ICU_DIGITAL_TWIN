@@ -2,370 +2,405 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import {
   INITIAL_BED_PROFILES,
   DEMO_THRESHOLDS,
+  canonicalizeRoomId,
   evaluateBedStatus,
 } from '../services/dataManager';
-import { fetchRooms } from '../services/api';
+import {
+  fetchRooms,
+  fetchAlerts,
+  postAcknowledgeAlert,
+  triggerScenario as apiTriggerScenario,
+  controlSimulation as apiControlSimulation,
+  fetchRoomForecast,
+  fetchForecastEvaluation,
+} from '../services/api';
 
 const ICUContext = createContext(null);
-
 const WS_URL = 'ws://localhost:8000/ws/live';
 
 // Pre-populate 30 trend points for smooth initial sparklines
-function createInitialTrends(baseVitals) {
+function createInitialTrends(baseAir, baseVitals) {
   const points = 30;
   const history = [];
   const now = Date.now();
 
   for (let i = points - 1; i >= 0; i--) {
+    const jitterPM25 = (Math.random() - 0.5) * 1.5;
+    const jitterCO2 = (Math.random() - 0.5) * 20;
     const jitterHR = (Math.random() - 0.5) * 3;
     const jitterSpO2 = (Math.random() - 0.5) * 0.8;
-    const jitterRR = (Math.random() - 0.5) * 1.5;
-    const jitterTemp = (Math.random() - 0.5) * 0.1;
-    const jitterBP = (Math.random() - 0.5) * 4;
 
     history.push({
-      timestamp: new Date(now - i * 3000).toISOString(),
+      timestamp: new Date(now - i * 5000).toISOString(),
+      pm25_ug_m3: Math.max(2.0, Math.round((baseAir.pm25_ug_m3 + jitterPM25) * 10) / 10),
+      pm10_ug_m3: Math.max(5.0, Math.round((baseAir.pm10_ug_m3 + jitterPM25 * 1.6) * 10) / 10),
+      co2_ppm: Math.max(400, Math.round(baseAir.co2_ppm + jitterCO2)),
+      temperature_c: Math.round((baseAir.temperature_c + (Math.random() - 0.5) * 0.2) * 10) / 10,
+      relative_humidity_pct: Math.round(baseAir.relative_humidity_pct + (Math.random() - 0.5) * 1.2),
       heartRate: Math.round(baseVitals.heartRate + jitterHR),
       spo2: Math.min(100, Math.max(80, Math.round((baseVitals.spo2 + jitterSpO2) * 10) / 10)),
-      respiratoryRate: Math.round(baseVitals.respiratoryRate + jitterRR),
-      temperature: Math.round((baseVitals.temperature + jitterTemp) * 10) / 10,
-      systolicBP: Math.round(baseVitals.systolicBP + jitterBP),
-      diastolicBP: Math.round(baseVitals.diastolicBP + jitterBP * 0.6),
+      respiratoryRate: baseVitals.respiratoryRate,
+      systolicBP: baseVitals.systolicBP,
+      diastolicBP: baseVitals.diastolicBP,
     });
   }
   return history;
 }
 
 export function ICUProvider({ children }) {
-  // Navigation: 'icu_floor' | 'overview' | 'patient_vitals' | 'alerts' | 'settings'
-  const [activeNav, setActiveNav] = useState('icu_floor');
-  const [selectedRoomId, setSelectedRoomId] = useState('ICU-101');
+  /**
+   * Complete 5-Step Hierarchical Navigation State:
+   * 'level1_hospital'   -> Modern Hospital Campus & Exterior 3D
+   * 'level2_reception'  -> Hospital Atrium & Reception Lobby 3D
+   * 'level3_icu_floor'  -> ICU Department Floor 3D (5 selectable rooms)
+   * 'level4_icu_room'   -> Focused 3D ICU Room Interior
+   * 'dashboard'         -> Environmental Monitoring Dashboard
+   * 'forecast'          -> Predictive Analytics & ML Evaluation
+   * 'alerts'            -> Clinical Alerts & Triage Audit
+   * 'settings'          -> Scenarios & Threshold Configuration
+   */
+  const [level, setLevel] = useState('level1_hospital'); // Step 1: Hospital Overview landing experience!
+  const [selectedRoomId, setSelectedRoomId] = useState('ICU-01');
   const [thresholds, setThresholds] = useState(DEMO_THRESHOLDS);
   const [isSimulationPaused, setIsSimulationPaused] = useState(false);
   const [wsStatus, setWsStatus] = useState('connecting'); // 'connected' | 'simulated' | 'connecting'
-  const [simulationSpeedMs, setSimulationSpeedMs] = useState(3000);
+  const [simulationSpeedSeconds, setSimulationSpeedSeconds] = useState(5.0);
+  const [activeScenario, setActiveScenario] = useState('stable');
 
-  // Beds data store
+  // Beds data store for the 5 canonical rooms
   const [beds, setBeds] = useState(() => {
     return INITIAL_BED_PROFILES.map((profile) => ({
       ...profile,
       status: profile.initialStatus,
       lastUpdated: new Date().toISOString(),
       isStale: false,
-      currentVitals: { ...profile.baseVitals },
       currentAir: { ...profile.baseAir },
-      trends: createInitialTrends(profile.baseVitals),
+      currentVitals: { ...profile.baseVitals },
+      trends: createInitialTrends(profile.baseAir, profile.baseVitals),
     }));
   });
 
-  // Alert History Log (Deduplicated audit trail)
-  const [alerts, setAlerts] = useState([
-    {
-      id: 'alt-init-1',
-      roomId: 'ICU-104',
-      bedNumber: 'Bed 4',
-      timestamp: new Date(Date.now() - 140000).toISOString(),
-      severity: 'alert',
-      metric: 'Heart Rate & SpO2',
-      message: 'Critical Tachycardia (118 bpm) & Desaturation (89%)',
-      value: '118 bpm / 89% SpO2',
-      acknowledged: false,
-    },
-    {
-      id: 'alt-init-2',
-      roomId: 'ICU-103',
-      bedNumber: 'Bed 3',
-      timestamp: new Date(Date.now() - 360000).toISOString(),
-      severity: 'warning',
-      metric: 'SpO2 Oxygen Sat.',
-      message: 'Borderline Hypoxemia below 95%',
-      value: '92% SpO2',
-      acknowledged: true,
-    },
-    {
-      id: 'alt-init-3',
-      roomId: 'ICU-104',
-      bedNumber: 'Bed 4',
-      timestamp: new Date(Date.now() - 520000).toISOString(),
-      severity: 'alert',
-      metric: 'CO2 Level',
-      message: 'Ventilation threshold exceeded (1040 ppm)',
-      value: '1040 ppm',
-      acknowledged: true,
-    },
-  ]);
-
-  // Alert deduplication tracker: maps `${roomId}_${metric}` to last alert timestamp
+  // Alerts state
+  const [alerts, setAlerts] = useState([]);
   const alertCooldownRef = useRef(new Map());
 
   // WebSocket reference
   const wsRef = useRef(null);
   const simTimerRef = useRef(null);
 
-  // Helper to trigger alert without duplicates
-  const registerAlert = useCallback((roomId, bedNumber, severity, metric, message, value) => {
-    const key = `${roomId}_${metric}_${severity}`;
-    const now = Date.now();
-    const lastTrigger = alertCooldownRef.current.get(key) || 0;
+  // Navigation action handlers
+  const enterHospital = useCallback(() => setLevel('level1_hospital'), []);
+  const enterReception = useCallback(() => setLevel('level2_reception'), []);
+  const enterICUFloor = useCallback(() => setLevel('level3_icu_floor'), []);
+  const enterRoom = useCallback((roomId) => {
+    if (roomId) setSelectedRoomId(canonicalizeRoomId(roomId));
+    setLevel('level4_icu_room');
+  }, []);
+  const openDashboard = useCallback(() => setLevel('dashboard'), []);
+  const openForecast = useCallback(() => setLevel('forecast'), []);
+  const openAlerts = useCallback(() => setLevel('alerts'), []);
+  const openSettings = useCallback(() => setLevel('settings'), []);
 
-    // Suppress duplicates within a 45-second window
-    if (now - lastTrigger < 45000) return;
-
-    alertCooldownRef.current.set(key, now);
-
-    const newAlert = {
-      id: `alt-${now}-${Math.random().toString(36).substr(2, 5)}`,
-      roomId,
-      bedNumber,
-      timestamp: new Date().toISOString(),
-      severity,
-      metric,
-      message,
-      value,
-      acknowledged: false,
-    };
-
-    setAlerts((prev) => [newAlert, ...prev.slice(0, 99)]);
+  // Hierarchical back navigation
+  const navigateBack = useCallback(() => {
+    setLevel((curr) => {
+      if (curr === 'level4_icu_room') return 'level3_icu_floor';
+      if (curr === 'level3_icu_floor') return 'level2_reception';
+      if (curr === 'level2_reception') return 'level1_hospital';
+      if (curr === 'dashboard' || curr === 'forecast') return 'level3_icu_floor';
+      return 'level1_hospital';
+    });
   }, []);
 
-  // Update a single bed with fresh readings
-  const updateBedData = useCallback(
-    (roomId, newVitals, newAir) => {
-      setBeds((prevBeds) => {
-        return prevBeds.map((bed) => {
-          if (bed.roomId !== roomId) return bed;
+  // Update a single bed record safely
+  const updateBedData = useCallback((roomId, newAir, newVitals) => {
+    const canonId = canonicalizeRoomId(roomId);
 
-          const updatedVitals = { ...bed.currentVitals, ...newVitals };
-          const updatedAir = { ...bed.currentAir, ...newAir };
-          const newStatus = evaluateBedStatus(updatedVitals, updatedAir, thresholds);
+    setBeds((prevBeds) => {
+      return prevBeds.map((bed) => {
+        if (bed.roomId !== canonId) return bed;
 
-          // Check if we need to log an alert
-          if (newStatus === 'alert') {
-            let msg = 'Biometric critical threshold violation';
-            let metricName = 'Vital Signs';
-            let val = `${updatedVitals.heartRate} bpm / ${updatedVitals.spo2}% SpO2`;
+        const updatedAir = { ...bed.currentAir, ...newAir };
+        const updatedVitals = newVitals ? { ...bed.currentVitals, ...newVitals } : bed.currentVitals;
+        const newStatus = evaluateBedStatus(updatedVitals, updatedAir, thresholds);
 
-            if (updatedVitals.heartRate > thresholds.heartRate.warningMax) {
-              msg = `Critical Tachycardia: ${updatedVitals.heartRate} bpm`;
-              metricName = 'Heart Rate';
-              val = `${updatedVitals.heartRate} bpm`;
-            } else if (updatedVitals.spo2 < thresholds.spo2.warningMin) {
-              msg = `Severe Desaturation: ${updatedVitals.spo2}% SpO2`;
-              metricName = 'SpO2';
-              val = `${updatedVitals.spo2}%`;
-            } else if (updatedAir.co2 > thresholds.co2.warningMax) {
-              msg = `Excessive CO2 Level: ${Math.round(updatedAir.co2)} ppm`;
-              metricName = 'CO2 Level';
-              val = `${Math.round(updatedAir.co2)} ppm`;
-            }
-            registerAlert(roomId, bed.bedNumber, 'alert', metricName, msg, val);
-          } else if (newStatus === 'warning') {
-            registerAlert(
-              roomId,
-              bed.bedNumber,
-              'warning',
-              'Sub-Optimal Readings',
-              'Parameters trending outside standard clinical tolerances',
-              `${updatedVitals.heartRate} bpm / ${updatedVitals.spo2}%`
-            );
-          }
+        const newPoint = {
+          timestamp: new Date().toISOString(),
+          pm25_ug_m3: updatedAir.pm25_ug_m3 ?? updatedAir.pm25,
+          pm10_ug_m3: updatedAir.pm10_ug_m3 ?? updatedAir.pm10,
+          co2_ppm: updatedAir.co2_ppm ?? updatedAir.co2,
+          temperature_c: updatedAir.temperature_c ?? updatedAir.temperature,
+          relative_humidity_pct: updatedAir.relative_humidity_pct ?? updatedAir.humidity,
+          heartRate: updatedVitals.heartRate,
+          spo2: updatedVitals.spo2,
+          respiratoryRate: updatedVitals.respiratoryRate,
+          systolicBP: updatedVitals.systolicBP,
+          diastolicBP: updatedVitals.diastolicBP,
+        };
 
-          // Maintain 30-item sliding window of trends
-          const newTrendPoint = {
-            timestamp: new Date().toISOString(),
-            heartRate: updatedVitals.heartRate,
-            spo2: updatedVitals.spo2,
-            respiratoryRate: updatedVitals.respiratoryRate,
-            temperature: updatedVitals.temperature,
-            systolicBP: updatedVitals.systolicBP,
-            diastolicBP: updatedVitals.diastolicBP,
-          };
+        const updatedTrends = [...bed.trends.slice(1), newPoint];
 
-          const updatedTrends = [...bed.trends.slice(1), newTrendPoint];
-
-          return {
-            ...bed,
-            status: newStatus,
-            lastUpdated: new Date().toISOString(),
-            isStale: false,
-            currentVitals: updatedVitals,
-            currentAir: updatedAir,
-            trends: updatedTrends,
-          };
-        });
+        return {
+          ...bed,
+          status: newStatus,
+          lastUpdated: new Date().toISOString(),
+          isStale: false,
+          currentAir: updatedAir,
+          currentVitals: updatedVitals,
+          trends: updatedTrends,
+        };
       });
-    },
-    [thresholds, registerAlert]
-  );
-
-  // Physiological Realistic Client-Side Simulation Tick
-  const runSimulationTick = useCallback(() => {
-    if (isSimulationPaused) return;
-
-    INITIAL_BED_PROFILES.forEach((profile) => {
-      // Dynamic natural physiological variations
-      const isSick = profile.roomId === 'ICU-104';
-      const isModerate = profile.roomId === 'ICU-103';
-
-      const hrDrift = (Math.random() - 0.5) * (isSick ? 4.5 : 2.0);
-      const spo2Drift = (Math.random() - 0.5) * (isSick ? 1.2 : 0.4);
-      const rrDrift = (Math.random() - 0.5) * (isSick ? 1.8 : 0.8);
-      const tempDrift = (Math.random() - 0.5) * 0.08;
-      const bpDrift = (Math.random() - 0.5) * 3;
-
-      const base = profile.baseVitals;
-      const baseAir = profile.baseAir;
-
-      const newVitals = {
-        heartRate: Math.max(45, Math.min(160, Math.round(base.heartRate + hrDrift))),
-        spo2: Math.max(82, Math.min(100, Math.round((base.spo2 + spo2Drift) * 10) / 10)),
-        respiratoryRate: Math.max(8, Math.min(38, Math.round(base.respiratoryRate + rrDrift))),
-        temperature: Math.round((base.temperature + tempDrift) * 10) / 10,
-        systolicBP: Math.round(base.systolicBP + bpDrift),
-        diastolicBP: Math.round(base.diastolicBP + bpDrift * 0.6),
-      };
-
-      const newAir = {
-        pm25: Math.max(2, Math.round((baseAir.pm25 + (Math.random() - 0.5) * 2.2) * 10) / 10),
-        pm10: Math.max(5, Math.round((baseAir.pm10 + (Math.random() - 0.5) * 3.5) * 10) / 10),
-        co2: Math.max(380, Math.round(baseAir.co2 + (Math.random() - 0.5) * 18)),
-        temperature: Math.round((baseAir.temperature + (Math.random() - 0.5) * 0.2) * 10) / 10,
-        humidity: Math.round(baseAir.humidity + (Math.random() - 0.5) * 1.5),
-        airChangesPerHour: Math.round((baseAir.airChangesPerHour + (Math.random() - 0.5) * 0.4) * 10) / 10,
-        pressureGradient: Math.round((baseAir.pressureGradient + (Math.random() - 0.5) * 0.3) * 10) / 10,
-      };
-
-      updateBedData(profile.roomId, newVitals, newAir);
     });
-  }, [isSimulationPaused, updateBedData]);
+  }, [thresholds]);
 
-  // Connect to live WebSocket or fallback seamlessly to simulation
+  // Load initial rooms and alerts from backend REST
+  useEffect(() => {
+    async function loadBackendInitial() {
+      try {
+        const [roomsData, alertsData] = await Promise.all([
+          fetchRooms().catch(() => null),
+          fetchAlerts(null, 50).catch(() => null),
+        ]);
+
+        if (roomsData && Array.isArray(roomsData)) {
+          roomsData.forEach((r) => {
+            const rd = r.latest_reading || {};
+            updateBedData(r.room_id, {
+              pm25_ug_m3: rd.pm25_ug_m3 ?? rd.pm25,
+              pm10_ug_m3: rd.pm10_ug_m3 ?? rd.pm10,
+              co2_ppm: rd.co2_ppm ?? rd.co2,
+              temperature_c: rd.temperature_c ?? rd.temperature,
+              relative_humidity_pct: rd.relative_humidity_pct ?? rd.humidity,
+              pm25: rd.pm25,
+              pm10: rd.pm10,
+              co2: rd.co2,
+              temperature: rd.temperature,
+              humidity: rd.humidity,
+            });
+          });
+        }
+
+        if (alertsData && Array.isArray(alertsData.alerts)) {
+          setAlerts(alertsData.alerts);
+        }
+      } catch (err) {
+        console.warn('Backend initial fetch fallback to simulation mode:', err);
+      }
+    }
+
+    loadBackendInitial();
+  }, [updateBedData]);
+
+  // WebSocket connection management with smooth fallback
   useEffect(() => {
     let ws = null;
-    let fallbackToSimTimeout = null;
+    let fallbackTimeout = null;
 
-    function tryWebSocket() {
+    function connectWS() {
       try {
         ws = new WebSocket(WS_URL);
         wsRef.current = ws;
 
         ws.onopen = () => {
           setWsStatus('connected');
-          if (fallbackToSimTimeout) clearTimeout(fallbackToSimTimeout);
+          if (fallbackTimeout) clearTimeout(fallbackTimeout);
         };
 
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
+            if (data.scenario) {
+              setActiveScenario(data.scenario);
+            }
             if (data.rooms && Array.isArray(data.rooms)) {
               data.rooms.forEach((r) => {
-                const vitals = {
-                  heartRate: r.status === 'alert' ? 116 : r.status === 'warning' ? 95 : 74,
-                  spo2: r.status === 'alert' ? 89 : r.status === 'warning' ? 93 : 98,
-                  respiratoryRate: r.status === 'alert' ? 26 : r.status === 'warning' ? 20 : 15,
-                  temperature: r.temperature || 37.0,
-                  systolicBP: r.status === 'alert' ? 152 : 122,
-                  diastolicBP: r.status === 'alert' ? 96 : 78,
-                };
+                const canonId = canonicalizeRoomId(r.room_id);
                 const air = {
-                  pm25: r.pm25 || 12,
-                  pm10: r.pm10 || 20,
-                  co2: r.co2 || 500,
-                  temperature: r.temperature || 22,
-                  humidity: r.humidity || 50,
-                  airChangesPerHour: 12.5,
-                  pressureGradient: r.room_id === 'ICU-101' ? -8.0 : 2.5,
+                  pm25_ug_m3: r.pm25_ug_m3 ?? r.pm25,
+                  pm10_ug_m3: r.pm10_ug_m3 ?? r.pm10,
+                  co2_ppm: r.co2_ppm ?? r.co2,
+                  temperature_c: r.temperature_c ?? r.temperature,
+                  relative_humidity_pct: r.relative_humidity_pct ?? r.humidity,
+                  pm25: r.pm25,
+                  pm10: r.pm10,
+                  co2: r.co2,
+                  temperature: r.temperature,
+                  humidity: r.humidity,
                 };
-                updateBedData(r.room_id, vitals, air);
+
+                // Approximate clinical vitals response to environmental stress
+                const isAlert = r.status === 'alert';
+                const isWarning = r.status === 'warning';
+                const vitals = {
+                  heartRate: isAlert ? 116 : isWarning ? 94 : 74,
+                  spo2: isAlert ? 89 : isWarning ? 93 : 98,
+                  respiratoryRate: isAlert ? 26 : isWarning ? 20 : 15,
+                  systolicBP: isAlert ? 152 : isWarning ? 134 : 122,
+                  diastolicBP: isAlert ? 96 : isWarning ? 86 : 78,
+                  temperature: isAlert ? 37.8 : isWarning ? 37.2 : 36.8,
+                };
+
+                updateBedData(canonId, air, vitals);
               });
+
+              // Also refresh alerts periodically
+              fetchAlerts(null, 50).then((res) => {
+                if (res && res.alerts) setAlerts(res.alerts);
+              }).catch(() => {});
             }
           } catch (e) {
             console.warn('WS message parse error:', e);
           }
         };
 
-        ws.onerror = () => {
-          setWsStatus('simulated');
-        };
-
-        ws.onclose = () => {
-          setWsStatus('simulated');
-        };
+        ws.onerror = () => setWsStatus('simulated');
+        ws.onclose = () => setWsStatus('simulated');
       } catch (e) {
         setWsStatus('simulated');
       }
     }
 
-    tryWebSocket();
+    connectWS();
 
-    // If WebSocket hasn't connected in 1.8 seconds, fall back smoothly to simulated engine
-    fallbackToSimTimeout = setTimeout(() => {
-      if (wsStatus === 'connecting') {
-        setWsStatus('simulated');
-      }
-    }, 1800);
+    fallbackTimeout = setTimeout(() => {
+      if (wsStatus === 'connecting') setWsStatus('simulated');
+    }, 2000);
 
     return () => {
-      if (fallbackToSimTimeout) clearTimeout(fallbackToSimTimeout);
+      if (fallbackTimeout) clearTimeout(fallbackTimeout);
       if (ws) ws.close();
     };
   }, [updateBedData]);
 
-  // Simulation heartbeat ticker (runs when in simulated mode or as fallback)
+  // Client-side fallback ticker (runs if backend is unreachable)
   useEffect(() => {
     if (wsStatus === 'connected') return;
 
     simTimerRef.current = setInterval(() => {
-      runSimulationTick();
-    }, simulationSpeedMs);
+      if (isSimulationPaused) return;
+
+      INITIAL_BED_PROFILES.forEach((profile) => {
+        const isSick = profile.roomId === 'ICU-04';
+        const isWarning = profile.roomId === 'ICU-03';
+
+        const driftPM = (Math.random() - 0.5) * (isSick ? 4.0 : 1.5);
+        const driftCO2 = (Math.random() - 0.5) * (isSick ? 35.0 : 15.0);
+
+        const baseAir = profile.baseAir;
+        const newAir = {
+          pm25_ug_m3: Math.max(3.0, Math.round((baseAir.pm25_ug_m3 + driftPM) * 10) / 10),
+          pm10_ug_m3: Math.max(6.0, Math.round((baseAir.pm10_ug_m3 + driftPM * 1.5) * 10) / 10),
+          co2_ppm: Math.max(390, Math.round(baseAir.co2_ppm + driftCO2)),
+          temperature_c: Math.round((baseAir.temperature_c + (Math.random() - 0.5) * 0.15) * 10) / 10,
+          relative_humidity_pct: Math.round(baseAir.relative_humidity_pct + (Math.random() - 0.5) * 1.0),
+          pm25: Math.max(3.0, Math.round((baseAir.pm25_ug_m3 + driftPM) * 10) / 10),
+          pm10: Math.max(6.0, Math.round((baseAir.pm10_ug_m3 + driftPM * 1.5) * 10) / 10),
+          co2: Math.max(390, Math.round(baseAir.co2_ppm + driftCO2)),
+          temperature: Math.round((baseAir.temperature_c + (Math.random() - 0.5) * 0.15) * 10) / 10,
+          humidity: Math.round(baseAir.relative_humidity_pct + (Math.random() - 0.5) * 1.0),
+          airChangesPerHour: baseAir.airChangesPerHour,
+          pressureGradient: baseAir.pressureGradient,
+        };
+
+        const newVitals = {
+          heartRate: isSick ? 118 : isWarning ? 96 : 74,
+          spo2: isSick ? 89 : isWarning ? 92 : 98,
+          respiratoryRate: isSick ? 27 : isWarning ? 22 : 15,
+          temperature: isSick ? 38.6 : 36.9,
+          systolicBP: isSick ? 154 : 122,
+          diastolicBP: isSick ? 96 : 78,
+        };
+
+        updateBedData(profile.roomId, newAir, newVitals);
+      });
+    }, simulationSpeedSeconds * 1000);
 
     return () => {
       if (simTimerRef.current) clearInterval(simTimerRef.current);
     };
-  }, [wsStatus, simulationSpeedMs, runSimulationTick]);
+  }, [wsStatus, isSimulationPaused, simulationSpeedSeconds, updateBedData]);
 
-  // Acknowledge single alert
-  const acknowledgeAlert = useCallback((alertId) => {
-    setAlerts((prev) =>
-      prev.map((alt) => (alt.id === alertId ? { ...alt, acknowledged: true } : alt))
-    );
+  // Scenario trigger wrapper
+  const triggerScenario = useCallback(async (scenario, roomId = null, parameter = null, magnitude = null) => {
+    setActiveScenario(scenario);
+    try {
+      await apiTriggerScenario(scenario, roomId, parameter, magnitude);
+    } catch (e) {
+      console.warn('Local scenario trigger only (backend offline):', e);
+    }
   }, []);
 
-  // Clear all acknowledged alerts
-  const clearAcknowledgedAlerts = useCallback(() => {
-    setAlerts((prev) => prev.filter((alt) => !alt.acknowledged));
+  // Simulation control wrapper
+  const setSpeed = useCallback(async (speedSec) => {
+    setSimulationSpeedSeconds(speedSec);
+    try {
+      await apiControlSimulation('set_speed', speedSec);
+    } catch (e) {}
+  }, []);
+
+  const togglePause = useCallback(async () => {
+    const next = !isSimulationPaused;
+    setIsSimulationPaused(next);
+    try {
+      await apiControlSimulation(next ? 'pause' : 'resume');
+    } catch (e) {}
+  }, [isSimulationPaused]);
+
+  // Acknowledge alert
+  const acknowledgeAlert = useCallback(async (alertId) => {
+    setAlerts((prev) =>
+      prev.map((alt) => (alt.alert_id === alertId || alt.id === alertId ? { ...alt, acknowledged: 1 } : alt))
+    );
+    try {
+      await postAcknowledgeAlert(alertId);
+    } catch (e) {}
   }, []);
 
   // Selected bed helper
   const selectedBed = beds.find((b) => b.roomId === selectedRoomId) || beds[0];
 
-  // Global counts
+  // Aggregates
   const safeCount = beds.filter((b) => b.status === 'safe').length;
   const warningCount = beds.filter((b) => b.status === 'warning').length;
   const alertCount = beds.filter((b) => b.status === 'alert').length;
-  const unacknowledgedAlertsCount = alerts.filter((a) => !a.acknowledged).length;
+  const unacknowledgedCount = alerts.filter((a) => !a.acknowledged).length;
 
   const value = {
-    activeNav,
-    setActiveNav,
+    // Navigation
+    level,
+    setLevel,
+    enterHospital,
+    enterReception,
+    enterICUFloor,
+    enterRoom,
+    openDashboard,
+    openForecast,
+    openAlerts,
+    openSettings,
+    navigateBack,
+
+    // Data
     selectedRoomId,
     setSelectedRoomId,
     selectedBed,
     beds,
     alerts,
-    unacknowledgedAlertsCount,
     safeCount,
     warningCount,
     alertCount,
+    unacknowledgedCount,
     wsStatus,
     thresholds,
     setThresholds,
+
+    // Simulation & Scenarios
+    activeScenario,
+    triggerScenario,
     isSimulationPaused,
-    setIsSimulationPaused,
-    simulationSpeedMs,
-    setSimulationSpeedMs,
+    togglePause,
+    simulationSpeedSeconds,
+    setSpeed,
     acknowledgeAlert,
-    clearAcknowledgedAlerts,
   };
 
   return <ICUContext.Provider value={value}>{children}</ICUContext.Provider>;
@@ -378,4 +413,3 @@ export function useICU() {
   }
   return context;
 }
-
