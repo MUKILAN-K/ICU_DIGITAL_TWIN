@@ -260,9 +260,6 @@ export default function ICURoomInterior3D({ room, onOpenAnalytics }) {
           if (child.isMesh) {
             child.castShadow = true;
             child.receiveShadow = true;
-            if (child.material) {
-              child.material.side = THREE.DoubleSide;
-            }
           }
         });
 
